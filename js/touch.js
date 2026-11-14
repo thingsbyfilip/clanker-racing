@@ -2,12 +2,16 @@
 // On-screen touch controls for the race (phones and tablets). Shown while the last input was a finger (or on a touch-only device from the start), and always with
 // DEBUG_MOBILE_CONTROLS (config.js), where the mouse plays the finger. They turn the simplified HUD on (everything at the top) and hide the controls help.
 // Left half: a floating stick. It appears where the thumb lands and follows the thumb past its rim a little (TSTICK_LEASH, within stickZone), so the thumb never has to find it; sideways steers
-// (analog, with a dead zone), holding it drives (TOUCH_AUTO_THROTTLE; else push up), pulling it down reverses.
+// (analog, with a dead zone), holding it drives (TOUCH_AUTO_THROTTLE; else push up), pulling it straight down reverses (TREV).
 // Right: NITROUS (large, its rim is the tank) and BRAKE (the handbrake). A button's hit area is larger than its circle, and a thumb slides from one to the other.
 // Top right, under the bars: BACK ON TRACK and PAUSE (taps). The race reads all of it through touchState in inp() (input.js), like the pad.
 let touchOn=false;                                     // the controls are in use (html.tctl)
 const touchState={thr:false,brk:false,hb:false,nitro:false,steer:0};
-const TSTICK_DEAD=0.12, TSTICK_FULL=0.8, TSTICK_DOWN=0.45;   // fractions of the stick's radius: dead zone, full lock, how far down reverses
+const TSTICK_DEAD=0.12, TSTICK_FULL=0.8;               // fractions of the stick's radius: dead zone, full lock
+// reverse must be meant: the knob pulled down this far (radii), within this angle (degrees) of straight down, and steering less than this (radii). A left thumb
+// drops as it sweeps left, so looser limits would read a hard left turn as reverse. Once reversing, the looser KEEP limits hold it, so it does not flicker
+const TREV={down:0.6,cone:30,steer:0.4}, TREV_KEEP={down:0.4,cone:45,steer:1};
+const TFWD_KEEP=-0.25;                                 // without TOUCH_AUTO_THROTTLE: once driving, the knob may sag this far below the middle (radii) and still drive
 const elTouch=$('touch');
 let TLAY=null;                                          // the layout in CSS px (touchLayout)
 const tPtr=new Map();                                  // pointerId > {k:'stick'|'btn', ...}
@@ -48,8 +52,9 @@ function stickDraw(){
   el.classList.toggle('fwd',on&&touchState.thr); el.classList.toggle('back',on&&touchState.brk);
   $('tknob').style.transform='translate(-50%,-50%) translate('+(on?s.x-s.ox:0)+'px,'+(on?s.y-s.oy:0)+'px)';
 }
-// the stick's zone, for its base's centre: the left half, in the lower half of the screen, whole on the screen
-const stickZone=()=>{ const R=TLAY.R; return {x0:R+4,x1:TLAY.W/2-R,y0:Math.max(R+4,TLAY.H*0.5),y1:TLAY.H-R-4}; };
+// the stick's zone, for its base's centre: the left half, in the lower half of the screen. The base may hang over the screen's edge, so it always
+// sits right under the thumb that lands: clamped up into the screen, a thumb near the bottom would start below the middle, which reads as reverse
+const stickZone=()=>({x0:0,x1:TLAY.W/2,y0:TLAY.H*0.5,y1:TLAY.H});
 const TSTICK_LEASH=1;                                  // how far (in radii) the base may be dragged from where the thumb landed
 // the stick's pointer moved: drag the base along when the thumb goes past the rim (on a short leash, never out of its zone), then read steering and pedals from the knob
 function stickMove(x,y){
@@ -61,8 +66,9 @@ function stickMove(x,y){
   s.x=s.ox+dx; s.y=s.oy+dy;
   const u=dx/R, au=Math.abs(u);
   touchState.steer=au<TSTICK_DEAD?0:Math.sign(u)*Math.min(1,(au-TSTICK_DEAD)/(TSTICK_FULL-TSTICK_DEAD));
-  const back=dy/R>TSTICK_DOWN&&dy>Math.abs(dx)*0.8;                      // down, within about 50 degrees of straight down
-  touchState.brk=back; touchState.thr=!back&&(TOUCH_AUTO_THROTTLE||-dy/R>TSTICK_DEAD);
+  const dn=dy/R, L=touchState.brk?TREV_KEEP:TREV;
+  const back=dn>L.down&&au<=dn*Math.tan(L.cone*Math.PI/180)&&au<L.steer;
+  touchState.thr=!back&&(TOUCH_AUTO_THROTTLE||-dn>(touchState.thr?TFWD_KEEP:TSTICK_DEAD)); touchState.brk=back;
   stickDraw();
 }
 function stickEnd(){ tStick.id=null; touchState.steer=0; touchState.thr=touchState.brk=false; stickDraw(); }
