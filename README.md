@@ -6,7 +6,16 @@ Race five AI opponents across about two dozen silly tracks, from a dirt canyon t
 
 **[Play it online](https://thingsbyfilip.github.io/clanker-racing/)**, or download the project and open `index.html`. Select a track, and press Enter or double-click/tap the track preview.
 
-Screenshots: [Fistful of Gravel](screenshots/fistful_of_gravel_river_crossing.png), [Volcanic Island](screenshots/volcanic_island_lava_bridge.png), [Snowy Mountain](screenshots/snowy_mountain_frozen_lake.png), [Tranquility Base](screenshots/tranquility_base_earthrise.png).
+<table>
+  <tr>
+    <td align="center"><img src="screenshots/fistful_of_gravel_river_crossing.png" alt="Fistful of Gravel: a river crossing" width="100%"><br>Fistful of Gravel</td>
+    <td align="center"><img src="screenshots/volcanic_island_lava_bridge.png" alt="Volcanic Island: a bridge over lava" width="100%"><br>Volcanic Island</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="screenshots/snowy_mountain_frozen_lake.png" alt="Snowy Mountain: a frozen lake" width="100%"><br>Snowy Mountain</td>
+    <td align="center"><img src="screenshots/tranquility_base_earthrise.png" alt="Tranquility Base: Earthrise over the Moon" width="100%"><br>Tranquility Base</td>
+  </tr>
+</table>
 
 ## Inspiration
 
