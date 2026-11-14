@@ -1,5 +1,6 @@
 // dev settings
 const DEBUG_MODE = false;                   // V: win the race instantly, L: wreck the car instantly, and UNLOCK ALL TRACKS in Settings
+const DEBUG_MOBILE_CONTROLS = false;        // simulate mobile controls
 const SHOW_COLLIDERS_IN_GAME = false;       // (only with DEBUG_MODE) draw every collision shape as a see-through solid, as tall as it collides, color depends on collider type
 
 // game version
@@ -16,6 +17,7 @@ const SIMPLIFY_INGAME_UI = false;           // no speed/level/difficulty, DAMAGE
 const CONTROLS_VERTICAL = false;            // the in-race controls help is a column at the lower left, one control per line from the top down
 const HIDE_CHECKPOINT_TIME = true;          // the CHECKPOINT X/Y message shows no time
 const PAUSE_MENU_CONTROLS = false;          // the pause menu lists the race controls beside its options
+const TOUCH_AUTO_THROTTLE = true;           // touch controls: holding the stick drives (pull it down to reverse); false: push it up to drive
 
 // level features
 const EXPAND_TERRAIN_AROUND_LEVEL = true;   // draw ground beyond the edges of the level, at the height of the edge and made of the level's own triangles (cars still stop at the edge)

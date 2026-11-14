@@ -10,6 +10,7 @@ const firstLevel=()=>!DIFF.explore&&!AI_DRIVE&&beatenCount()===0&&!/[?&](bench=|
 
 // what to press, as the tip names it: the bound key, the pad's button, or in mouse racing the mouse's own way of doing it
 function tutKey(a){
+  if(touchOn) return '<span class="k">'+{nitro:'THE FLAME BUTTON',brake:'THE BRAKE BUTTON',respawn:'THE ARROW BUTTON'}[a]+'</span>';      // the on-screen controls (js/touch.js), by their symbols
   const mouse=!padActive&&SAVE.mouseRace&&{nitro:'THE MOUSE WHEEL',brake:'BOTH MOUSE BUTTONS',respawn:'BACK ON TRACK'}[a];
   return '<span class="k">'+(mouse||hintKey(a).toUpperCase())+'</span>';
 }
@@ -81,7 +82,7 @@ const TUT_ICONS=(()=>{
 
 const TUT_TIPS=[   // at: checkpoints passed (the first: also TUT_FIRST seconds after GO!); text: a function, so the key names are read when shown; e: the symbol on both sides (TUT_ICONS)
   {at:()=>0,              e:'flame',     text:()=>'HOLD '+tutKey('nitro')+' FOR A NITROUS BOOST'},
-  {at:()=>1,              e:'hourglass', text:()=>'YOUR NITROUS REGENERATES OVER TIME <span class="nw">(BAR IN '+(SIMPLIFY_INGAME_UI?'UPPER':'LOWER')+'-RIGHT)</span>'},   // SIMPLIFY_INGAME_UI moves the bars to the upper right
+  {at:()=>1,              e:'hourglass', text:()=>'YOUR NITROUS REGENERATES OVER TIME <span class="nw">(BAR IN '+(simpleUI()?'UPPER':'LOWER')+'-RIGHT)</span>'},   // the simplified HUD (SIMPLIFY_INGAME_UI or the touch controls) moves the bars to the upper right
   {at:()=>2,              e:'nitro',     text:()=>'THE MORE YOU BUILD UP NITROUS, THE BIGGER THE BOOST'},
   {at:()=>4,              e:'turn',      text:()=>'TO MAKE SHARP TURNS AT MAX SPEED, HOLD '+tutKey('brake')+' TO BRAKE WHILE TURNING'},
   {at:()=>TOTAL_LAPS>1?L1():5,   e:'wrench', text:()=>'COMPLETING A LAP REPAIRS SOME CAR DAMAGE'},

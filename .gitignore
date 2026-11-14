@@ -11,6 +11,9 @@ ai_test_script/out/
 # Node, if the test harness ever gets dependencies
 node_modules/
 
+# Tasks
+.todo/
+
 # Editors and operating systems
 .vscode/
 .idea/

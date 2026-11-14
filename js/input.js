@@ -84,7 +84,7 @@ function pollPad(dt){
   padState={steer:dpad||ax,thr:val(PAD.RT)>PAD_TRIGGER,brk:val(PAD.LT)>PAD_TRIGGER,hb:btn(PAD.B),nitro:btn(PAD.A)};
   const edge=i=>{ const on=btn(i), was=padWas[i]; padWas[i]=on; return on&&!was; };
   const a=edge(PAD.A), b=edge(PAD.B), y=edge(PAD.Y), start=edge(PAD.START), lb=edge(PAD.LB), rb=edge(PAD.RB);
-  if(a||b||y||start||lb||rb||ax||ay||dpad||btn(PAD.UP)||btn(PAD.DOWN)||padState.thr||padState.brk){ if(!padActive){ padActive=true; setTouch(false); refreshHints(); } }
+  if(a||b||y||start||lb||rb||ax||ay||dpad||btn(PAD.UP)||btn(PAD.DOWN)||padState.thr||padState.brk){ if(!padActive){ padActive=true; setTouch(false); touchUse(false); refreshHints(); } }
   if(capturing()) return;
   if(uiTop()){
     if(a) uiNav('confirm',false); if(b) uiNav('cancel',false); if(lb||rb) uiNav('tab',false);
@@ -101,7 +101,8 @@ function pollPad(dt){
 function inp(){
   const P=padState||{};
   let thr=held('accel')||AUTO||P.thr, brk=held('reverse')||P.brk, hb=held('brake')||P.hb, nitro=held('nitro')||P.nitro, steer=(held('right')?1:0)-(held('left')?1:0)||P.steer||0;
-  if(SAVE.mouseRace){
+  if(touchOn){ const T=touchState; thr=thr||T.thr; brk=brk||T.brk; hb=hb||T.hb; nitro=nitro||T.nitro; steer=steer||T.steer; }     // the on-screen controls (js/touch.js)
+  else if(SAVE.mouseRace){
     const L=keys.Mouse0, R=keys.Mouse2;
     if(L&&R) hb=true; else { thr=thr||L; brk=brk||R; }
     nitro=nitro||keys.Mouse1; steer=steer||mouseSteer();

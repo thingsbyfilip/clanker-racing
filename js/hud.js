@@ -1,7 +1,7 @@
 'use strict';
 // HUD text and bars plus the minimap.
 const $=id=>document.getElementById(id);
-document.documentElement.classList.toggle('simpleui',SIMPLIFY_INGAME_UI);   // on <html>, because setMode replaces the body's class (CSS in index.html)
+document.documentElement.classList.toggle('simpleui',SIMPLIFY_INGAME_UI);   // on <html>, because setMode replaces the body's class (CSS in index.html); the touch controls turn it on too (touchUse)
 const elTL=$('tl'), elTR=$('tr'), elMsg=$('msg'), elSub=$('sub'), elNitro=$('nitroBar'), elDmg=$('dmgBar'), elPop=$('pop'), elPos=$('pos');
 // controls help at the lower left: a running line. Rebuilt whenever the bindings change.
 function controlsHelp(){
@@ -33,7 +33,7 @@ function refreshPauseControls(){
   const cap=k=>'<kbd>'+k+'</kbd>', caps=ks=>ks.length?ks.map(cap).join(''):'<kbd class="none">-</kbd>';
   const drive=[...new Set(['accel','reverse','left','right'].map(promptKey))];      // (Set: the pad's Stick and the mouse steer both ways)
   const row=(n,a)=>[n,caps(actionKeys(a))], nitro=row('Nitrous','nitro'), brake=row('Brake','brake');
-  const rows=[['Drive',caps(drive)],...(SIMPLIFY_INGAME_UI?[nitro,brake]:[brake,nitro]),row('Back on track','respawn'),row('Pause','pause')];
+  const rows=[['Drive',caps(drive)],...(simpleUI()?[nitro,brake]:[brake,nitro]),row('Back on track','respawn'),row('Pause','pause')];
   $('pctl').innerHTML='<span class="pch">CONTROLS</span>'+rows.map(([n,k])=>'<span class="pcn">'+n+'</span><span class="pck">'+k+'</span>').join('');
 }
 const ord=n=>n+(['TH','ST','ND','RD'][(n%100>=11&&n%100<=13)?0:(n%10<4?n%10:0)]);
@@ -131,5 +131,5 @@ function updateHud(spd){
   else if(race.state==='finished'){ m=race.place===1?"YOU'RE WINNER !":'FINISHED IN '+placeName(race.place)+' PLACE!'; s='Time '+fmt(race.finishT)+(race.best!==null?'  -  Best lap '+fmt(race.best):''); }
   if(HOLD||uiTop()==='results'){ m=''; s=''; }
   if(SAVE.mouseRace) $('msteer').style.left=(50+mouseSteer()*50)+'%';
-  elMsg.textContent=m; elMsg.classList.toggle('long',m.length>12); elSub.textContent=s; tutHud();
+  elMsg.textContent=m; elMsg.classList.toggle('long',m.length>12); elSub.textContent=s; tutHud(); touchHud();
 }

@@ -28,7 +28,7 @@ The game is inspired by *Big Red Racing* (1996, Big Red Software / Domark), an a
 
 ## Playing
 
-Open `index.html` in a desktop browser. `file://` works, so no server is needed. Keyboard, mouse and gamepad are supported, and the menus should also work on phones and tablets (although racing by touch is not built yet).
+Open `index.html` in a desktop browser. `file://` works, so no server is needed. Keyboard, mouse and gamepad are supported, and the game should also work on phones and tablets.
 
 | Action | Default keys |
 |---|---|
