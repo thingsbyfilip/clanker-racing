@@ -1,0 +1,2 @@
+# Store every file byte for byte: the project keeps some files CRLF and the rest LF on purpose
+* -text

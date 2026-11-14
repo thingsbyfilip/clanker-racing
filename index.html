@@ -1,0 +1,1091 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Clanker Racing</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>
+  /* menu fonts: Kanit Bold Italic (display) and Titillium Web (text), both SIL Open Font License 1.1, files and licences in fonts/ */
+  @font-face{font-family:"Kanit Bold Italic";src:url("fonts/Kanit-BoldItalic.ttf") format("truetype");font-weight:400;font-display:block}   /* the one Bold Italic style, registered as a family of its own so no CSS has to ask for weight 800 + italic */
+  @font-face{font-family:"Titillium Web";src:url("fonts/TitilliumWeb-Regular.ttf") format("truetype");font-weight:400;font-display:block}
+  @font-face{font-family:"Titillium Web";src:url("fonts/TitilliumWeb-SemiBold.ttf") format("truetype");font-weight:600;font-display:block}
+  @font-face{font-family:"Titillium Web";src:url("fonts/TitilliumWeb-Bold.ttf") format("truetype");font-weight:700;font-display:block}
+  :root{--display:'Kanit Bold Italic','Arial Black',Impact,sans-serif;--body:'Titillium Web','Segoe UI',Arial,sans-serif}   /* display: big headings (menu, countdown); body: all other text */
+  /* In-game outline + shadow of the generic (Titillium) HUD text: change it here. A 1px black outline (the ring) and a soft offset shadow behind it.
+     The big gold header text (#msg, #pos) is styled separately, with drop-shadow filters, further down. */
+  :root{--hud-text:1px 0 0 #000,-1px 0 0 #000,0 1px 0 #000,0 -1px 0 #000,1px 1px 0 #000,-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,2px 2px 1px rgba(0,0,0,.6)}
+  html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:var(--body);color:#fff}
+  #gl{position:fixed;left:0;top:0;width:100%;height:100%;image-rendering:crisp-edges;image-rendering:pixelated}
+  .hud{position:fixed;font-weight:700;font-size:24px;text-shadow:var(--hud-text);pointer-events:none;letter-spacing:1px}
+  /* The HUD scales on small windows (tablets, phones): --hu is 1px at 960x540 and above, so larger windows keep the sizes written as --hu*n below, and shrinks with the window
+     down to .55px. --mm, the minimap's size, also shrinks with the height (to 100px at 390 tall), so it never covers much of a short screen; --hm is the margin, --hb the bars' border */
+  :root{--hu:max(.55px,min(1px,calc(100vw / 960),calc(100vh / 540)));--mm:min(clamp(100px,calc(60vh - 134px),190px),calc(var(--hu)*190));--hm:max(8px,calc(var(--hu)*12));--hb:max(2px,calc(var(--hu)*3))}
+  #tl{left:50%;transform:translateX(-50%);top:calc(var(--hu)*10);text-align:center;font-size:calc(var(--hu)*24)}
+  #mini{position:fixed;left:var(--hm);top:var(--hm);width:var(--mm);height:var(--mm);border:3px solid #fff;box-shadow:2px 2px 0 #000;background:#000;image-rendering:pixelated}
+  #pos{left:calc(var(--hm) + 2px);top:calc(var(--hm) + var(--mm) + 12px);font-size:calc(var(--hu)*32);padding-right:4px}
+  #pop{left:0;right:0;top:16%;text-align:center;font-size:calc(var(--hu)*34)}
+  #tr{right:calc(var(--hu)*16);top:calc(var(--hu)*12);text-align:right;font-size:calc(var(--hu)*24)}
+  #tr .trd{font-size:max(10px,.625em);color:#ccc}   /* the difficulty line, smaller */
+  #bl{left:calc(var(--hu)*16);bottom:calc(var(--hu)*14);font-size:max(10px,calc(var(--hu)*15));font-weight:600;opacity:.9}
+  #nitroWrap{position:fixed;right:calc(var(--hu)*16);bottom:calc(var(--hu)*16);width:calc(var(--hu)*200);height:calc(var(--hu)*18);border:var(--hb) solid #fff;background:#300;box-shadow:2px 2px 0 #000}
+  #nitroBar{height:100%;width:100%;background:#ff8c00}
+  #nitroLbl{position:fixed;right:calc(var(--hu)*222 + var(--hb)*2);bottom:calc(var(--hu)*12);font-size:calc(var(--hu)*18)}
+  #bl{--blw:calc(100% - var(--hu)*330 - var(--hb)*2);max-width:min(46%,var(--blw))}   /* --blw: never under the DAMAGE and NITROUS labels, whose width follows --hu */
+  @media (min-width:768px){ #bl{max-width:min(64%,var(--blw))} }   /* the controls help may take more of the width on wider windows */
+  .ctl{display:inline-block;white-space:nowrap;margin-right:.93em}   /* a hint wraps as a whole, never in the middle */
+  /* SIMPLIFY_INGAME_UI (the simpleui class on <html>): no controls help, no speed / level / difficulty; DAMAGE and NITROUS at the upper right instead */
+  .simpleui #bl,.simpleui #tr{display:none!important}
+  #ctlPrompt{display:none;right:calc(var(--hu)*16);top:calc(var(--hu)*76);font-size:max(10px,calc(var(--hu)*15));font-weight:600;line-height:1.4;text-align:right;opacity:.9}   /* SIMPLIFY_INGAME_UI: nitrous and pause under the NITROUS bar, one per line, styled like the controls help (#bl) */
+  .simpleui body.play #ctlPrompt{display:block}   /* body.play: as an id rule it would outrank the body:not(.play) .hud rule below and show on the menus */
+  .simpleui #dmgWrap,.simpleui #nitroWrap,.simpleui #dmgLbl,.simpleui #nitroLbl{bottom:auto}
+  .simpleui #dmgWrap{top:calc(var(--hu)*16)} .simpleui #nitroWrap{top:calc(var(--hu)*46)}
+  .simpleui #dmgLbl{top:calc(var(--hu)*12)} .simpleui #nitroLbl{top:calc(var(--hu)*42)}
+  /* narrow portrait (phones): no room for three columns, so the lap and time go right-aligned under the speed and level (simplified: under the bars, and the controls prompt
+     under them); a tutorial tip goes a little higher, over the controls help, which wraps into more lines here */
+  @media (max-aspect-ratio:1/1) and (max-width:520px){
+    html:not(.simpleui) #tut{bottom:calc(64px + 5vh)}
+    :root{--hu:max(.55px,min(.7px,calc(100vw / 600)))}
+    #tl{left:auto;right:calc(var(--hu)*16);transform:none;top:calc(var(--hu)*130);text-align:right}
+    .simpleui #tl{top:calc(var(--hu)*72)}
+    .simpleui #ctlPrompt{top:calc(var(--hu)*150)}
+    #pop{top:calc(var(--hm) + var(--mm) + 56px)}      /* below the place, which a long message (MISSED CHECKPOINT) would cross */
+    body #msg{top:calc(var(--hm) + var(--mm) + 118px)} body #sub{top:calc(var(--hm) + var(--mm) + 185px)}      /* the countdown and the level's subtitle below that (body: they are defined further down) */
+  }
+  #bl.vert{max-width:none} #bl.vert .ctl{display:block;margin-right:0}   /* CONTROLS_VERTICAL: one control per line, top down; the column grows upwards from the bottom edge */
+  #dmgWrap{position:fixed;right:calc(var(--hu)*16);bottom:calc(var(--hu)*46);width:calc(var(--hu)*200);height:calc(var(--hu)*18);border:var(--hb) solid #fff;background:#222;box-shadow:2px 2px 0 #000}
+  #dmgBar{height:100%;width:0%;background:#2c2}
+  #dmgLbl{position:fixed;right:calc(var(--hu)*222 + var(--hb)*2);bottom:calc(var(--hu)*42);font-size:calc(var(--hu)*18)}
+  body:not(.play) #gl, body:not(.play) .hud, body:not(.play) #tut, body:not(.play) #mini{display:none}   /* #tut by id too: its own display:flex (an id rule) outranks .hud */
+  /* ---- track select menu: everything is sized in --u (1px at 960x540), so the layout scales with the window. Phones and tablets: the #mobileCss stylesheet redefines --u and rearranges the same elements.
+     Two columns, centred as a block. Left: every track in miniature, 6 columns x 4 rows (#grid). Right: one framed panel (#desc) of the same height with the number and name
+     of the track, the large map preview and, under it, the numbers and the description. Enter or a second click on the selected track starts the race. The controls hint is centred under both. */
+  :root{--u:max(.7px,min(calc(100vw / 960),calc(100vh / 540)));
+    --u2:calc(var(--u)*2);--u3:calc(var(--u)*3);--u4:calc(var(--u)*4);--u6:calc(var(--u)*6);--u8:calc(var(--u)*8);--u10:calc(var(--u)*10);--u12:calc(var(--u)*12);--u16:calc(var(--u)*16);--u24:calc(var(--u)*24);
+    --ink:#e9eefc;--dim:#93a0c4;--line:#2a3b6e;--gold:#ffd400;--panel:rgba(7,12,30,.74);
+    --bgsc:var(--noise,none) center/100% 100%,linear-gradient(180deg,#0e1c4a 0%,#070d26 45%,#000 100%);
+    --goldtxt:linear-gradient(180deg,#fff6a0 0%,#ffd400 48%,#ff8a00 100%)}
+  #menu{
+    display:none;position:fixed;left:0;top:0;right:0;bottom:0;padding:var(--u8) var(--u24) var(--u4);box-sizing:border-box;overflow:hidden;
+    background:var(--bgsc);color:var(--ink);font-family:var(--body);font-weight:600;user-select:none;-webkit-user-select:none;touch-action:manipulation;-webkit-tap-highlight-color:transparent}   /* touch: no double-tap zoom delay, no tap flash */
+  body.menu #menu{display:grid;grid-template-columns:calc(var(--u)*450) minmax(0,calc(var(--u)*620));grid-template-rows:auto auto calc(var(--u)*360) auto;justify-content:center;align-content:center;column-gap:var(--u24);row-gap:var(--u12)}
+  #title{grid-column:1/-1;grid-row:1;margin:0;text-align:center;padding-right:var(--u4);font-family:var(--display);font-weight:400;font-size:calc(var(--u)*44);line-height:1.05;letter-spacing:var(--u2);
+    background:linear-gradient(180deg,#fff6a0 0%,#ffd400 48%,#ff8a00 100%);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(var(--u2) var(--u2) 0 #a00)}   /* the game title, centred at the top: the header style (gold gradient caps, red offset shadow) */
+  /* every track in miniature, 6 columns x 4 rows: the grid and the panel fill the same row (360 --u tall), so the cells are 70 x about 86; a click selects that track, a click on the selected one starts the race.
+     --rows (menu.js) is the number of rows of tracks; --cellh is a quarter of the visible height */
+  #grid{--ggap:var(--u6);--cellh:calc((100% - var(--ggap)*3)/4);grid-column:1;grid-row:3;min-height:0;display:grid;grid-template-columns:repeat(6,1fr);grid-template-rows:repeat(var(--rows,4),var(--cellh));gap:var(--ggap)}
+  /* more than 4 rows (.many, menu.js): the grid scrolls a row at a time. The cells get shorter (the map keeps its size where it is limited by the width, only the blurred fill shrinks), so the next row shows, cut and fading out (--peek rows, including its gap):
+     that is what says there is more; .up/.down say on which side it is. At the last stop the bottom row is level with the panel and the cut row is at the top. The rail stands in the column gap, so nothing else moves.
+     --gpad: the room the frame and glow of a selected miniature need inside the scrolling box; less than the gap, so the rows out of view never show in it */
+  #menu.many #grid{--cellh:calc((100% + var(--ggap))/(4 + var(--peek)) - var(--ggap));--gpad:calc(var(--ggap) - var(--u));margin:calc(var(--gpad)*-1);padding:var(--gpad);overflow-y:auto;scrollbar-width:none;overscroll-behavior:contain;scroll-snap-type:y mandatory;scroll-padding:var(--gpad);
+    --ft:0%;--fb:0%;-webkit-mask-image:linear-gradient(180deg,transparent,#000 var(--ft),#000 calc(100% - var(--fb)),transparent);mask-image:linear-gradient(180deg,transparent,#000 var(--ft),#000 calc(100% - var(--fb)),transparent)}
+  #menu.many #grid.up{--ft:9%} #menu.many #grid.down{--fb:9%}
+  #menu.many #grid::-webkit-scrollbar{display:none}
+  #menu.many .thumb{scroll-snap-align:start}
+  #gbar{display:none;position:relative;grid-column:1;grid-row:3;justify-self:end;width:var(--u6);margin-right:calc(var(--u)*-15);background:#0c1330;box-shadow:inset 0 0 0 var(--u) var(--line);cursor:pointer;touch-action:none}
+  #gbar::before{content:'';position:absolute;left:calc(var(--u)*-8);right:calc(var(--u)*-8);top:0;bottom:0}   /* an easier target than the thin rail */
+  #menu.many #gbar{display:block}
+  #gthumb{position:absolute;left:0;right:0;background:#3a4a7c}
+  #gbar:hover #gthumb{background:#7f93d0} #gbar.drag #gthumb{background:var(--gold)}
+  .thumb{position:relative;background:#0c1330;border:var(--u2) solid #3a4a7c;box-sizing:border-box;cursor:pointer;overflow:hidden;container-type:size}
+  .thumb canvas{display:block}
+  .thumb .tback{position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover;filter:blur(calc(var(--u)*5)) brightness(.55);transform:scale(1.3)}   /* the cells are not square: the square map sits in the middle, a blurred copy of it fills the rest (as in the big preview) */
+  .thumb .tmap{position:absolute;left:50%;top:50%;width:min(100cqw,100cqh);height:min(100cqw,100cqh);transform:translate(-50%,-50%)}
+  .thumb:hover{border-color:#7f93d0}
+  /* progress marks: a star (bronze, silver or gold: the hardest difficulty cleared) and, on a locked track, a grey map under a lock with the number of tracks it needs */
+  .tstar{display:none;position:absolute;right:var(--u3);top:var(--u3);width:calc(var(--u)*23);height:calc(var(--u)*23);stroke:#3a1c00;stroke-width:2;z-index:1}
+  .thumb.s0 .tstar{display:block;fill:#d6894a} .thumb.s1 .tstar{display:block;fill:#dfe6ef} .thumb.s2 .tstar{display:block;fill:var(--gold)}
+  .tlock{display:none;position:absolute;left:0;top:0;right:0;bottom:0;flex-direction:column;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:calc(var(--u)*15);line-height:1.1;text-shadow:0 0 var(--u4) #000}
+  .tlock svg{width:calc(var(--u)*21);height:calc(var(--u)*21)}
+  .thumb.locked .tlock{display:flex}
+  .thumb.locked .tmap{filter:grayscale(1) brightness(.42)} .thumb.locked .tback{filter:blur(calc(var(--u)*5)) grayscale(1) brightness(.3)}
+  #grid.away .thumb.sel{box-shadow:none;border-color:#a8963c}                 /* the keyboard is up on the difficulty bar or BACK */
+  #mback{grid-column:1;grid-row:2;justify-self:start} #msettings{grid-column:2;grid-row:2;justify-self:end}      /* the row under the title: back, difficulty, settings */
+  .mbtn{align-self:center;width:calc(var(--u)*110);height:calc(var(--u)*32);display:flex;align-items:center;justify-content:center;background:#0c1330;border:var(--u2) solid #3a4a7c;box-sizing:border-box;font-family:var(--display);font-size:calc(var(--u)*14);letter-spacing:var(--u);color:#c4cde6;cursor:pointer}
+  .mbtn:hover{border-color:#7f93d0}
+  .mbtn.foc,#rdiff.foc{outline:var(--u2) solid var(--gold);outline-offset:var(--u2)} .mbtn.foc{color:var(--gold)}
+  #rdiff.open{background:rgba(255,212,0,.1);outline-color:#fff} #rdiff.open #rtext{color:var(--gold)}      /* selected: LEFT/RIGHT change it */
+  .thumb.sel{border-color:var(--gold);box-shadow:0 0 calc(var(--u)*12) rgba(255,212,0,.5);z-index:2}
+  #grid.anim .thumb{transition:border-color .12s,transform .1s,box-shadow .12s}      /* the little selection animation: only with MENU_THUMB_ANIM in config.js */
+  #grid.anim .thumb.sel{transform:scale(1.1)}
+  /* the difficulty bar under the game title: DIFFICULTY: MEDIUM with an arrow on each side, plain text with no frame or background (an arrow with nothing that way is greyed out; TAB cycles) */
+  #rdiff{grid-column:1/-1;grid-row:2;justify-self:center;width:calc(var(--u)*280);height:calc(var(--u)*36);display:flex;align-items:stretch;box-sizing:border-box}
+  #rtext{flex:1;min-width:0;display:flex;align-items:center;justify-content:center;gap:var(--u8);white-space:nowrap;font-size:calc(var(--u)*13);font-weight:700;letter-spacing:var(--u2);cursor:default}
+  #rtext{color:var(--dim)}                 /* the name has the same font and colour as the DIFFICULTY: label */
+  #rtext.long{letter-spacing:calc(var(--u)*.8);gap:calc(var(--u)*4)}      /* EXPLORATION: tighter, to fit between the arrows in the narrowest layouts */
+  .sarrow{flex:0 0 calc(var(--u)*34);display:flex;align-items:center;justify-content:center;color:var(--ink);opacity:.28;pointer-events:none;transition:background .12s}
+  .sarrow.on{opacity:1;pointer-events:auto;cursor:pointer}
+  .sarrow.on:hover{background:rgba(255,255,255,.1)} .sarrow.on:active{background:rgba(255,255,255,.2)}
+  .sarrow svg{width:46%;height:46%;fill:none;stroke:currentColor;stroke-width:3.2;stroke-linecap:square}
+  /* the track panel: number and name, the map preview, then the numbers and the description */
+  #desc{grid-column:2;grid-row:3;min-height:0;display:flex;flex-direction:column;padding:var(--u10) var(--u16) var(--u12);background:var(--panel);border:var(--u2) solid var(--line);box-sizing:border-box}
+  #snum{text-align:center;font-size:calc(var(--u)*12);font-weight:700;color:var(--dim);letter-spacing:var(--u3)}
+  #sname{display:block;text-align:center;white-space:nowrap;margin:var(--u3) 0 var(--u3);padding-right:var(--u4);font-family:var(--display);font-weight:400;font-size:calc(var(--u)*30);line-height:1.15;letter-spacing:var(--u);text-transform:uppercase;
+    background:linear-gradient(180deg,#fff6a0 0%,#ffd400 48%,#ff8a00 100%);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(var(--u2) var(--u2) 0 #a00)}   /* gold gradient caps with a red offset shadow */
+  #sloc{display:flex;align-items:center;justify-content:center;gap:var(--u6);margin:0 0 var(--u8);font-size:calc(var(--u)*12);font-weight:700;line-height:1.2;letter-spacing:var(--u2);color:var(--ink);white-space:nowrap;text-transform:uppercase}   /* where the track is in real life: a flag (flags.js) and the place */
+  #sloc svg{position:relative;height:calc(var(--u)*12);width:auto;flex:none;display:block}
+  #sloc .fl{box-shadow:0 0 0 var(--u) rgba(0,0,0,.65)}
+  #stage{flex:1;min-height:0;position:relative;overflow:hidden;background:#04070f;border:var(--u2) solid var(--line);container-type:size;cursor:pointer}   /* the map preview takes all the height left in the panel: the square map in the middle, the blurred copy of it fills the sides */
+  #stage:hover{border-color:#7f93d0}
+  .slide{position:absolute;left:0;top:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;visibility:hidden;opacity:0;will-change:transform,opacity}
+  .slide.cur{visibility:visible;opacity:1;transition:transform .27s cubic-bezier(.16,1,.3,1),opacity .2s ease-out}
+  .slide.out{visibility:visible;opacity:0;transition:transform .2s cubic-bezier(.5,0,.9,.5),opacity .15s ease-in}
+  #slock{display:none;position:absolute;left:0;top:0;right:0;bottom:0;flex-direction:column;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:calc(var(--u)*30);line-height:1.1;text-shadow:0 0 var(--u8) #000;z-index:3}
+  #slock svg{width:calc(var(--u)*44);height:calc(var(--u)*44)}
+  #stage.locked #slock{display:flex} #stage.locked .slide{filter:grayscale(1) brightness(.42)}
+  .sback{position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover;filter:blur(calc(var(--u)*16)) brightness(.55);transform:scale(1.25)}   /* the map again, blurred, to fill the sides of the stage */
+  .mapbox{position:relative;width:min(100cqw,100cqh);height:min(100cqw,100cqh);box-shadow:0 0 0 var(--u2) rgba(0,0,0,.55),0 0 calc(var(--u)*30) rgba(0,0,0,.6)}
+  .mapbox canvas{position:absolute;left:0;top:0;width:100%;height:100%;display:block}
+  #info{flex:none;display:flex;align-items:stretch;margin-top:var(--u8);container-type:inline-size}                       /* under the map: the numbers on the left, the description on the right */
+  #sstats{flex:none;display:grid;grid-template-columns:repeat(2,auto);align-content:center;gap:var(--u4) var(--u12)}
+  #sblurb em{color:#fff}
+  #sblurb{flex:1;min-width:0;text-wrap:pretty;margin:0 0 0 var(--u12);padding-left:var(--u12);border-left:var(--u2) solid var(--line);font-size:min(calc(var(--u)*12.5),2.7cqw);font-weight:400;line-height:1.26;color:#d3dcf3}   /* follows the width of the panel: 4 lines at most on a full 16:9 screen, where the panel is narrowest */
+  .stat b{display:block;font-family:var(--display);font-weight:400;font-size:calc(var(--u)*15);color:var(--ink);line-height:1.1;letter-spacing:var(--u)}
+  .stat span{font-size:calc(var(--u)*10);font-weight:700;color:var(--dim);letter-spacing:var(--u)}
+  .stat i{display:inline-block;width:calc(var(--u)*7);height:calc(var(--u)*7);margin-right:var(--u3);border-radius:50%;background:#ff9020;border:var(--u) solid #140d06}   /* the orange jump dot of the map */
+  .stat i.cp{width:calc(var(--u)*9);height:calc(var(--u)*4);border-radius:0;background:#9fc0ff;border-color:#000;vertical-align:calc(var(--u)*2)}   /* the blue checkpoint bar of the map */
+  .stat i.ln{width:calc(var(--u)*12);height:calc(var(--u)*7);border:0;border-radius:0;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 7' fill='none'%3E%3Cpath d='M1.2 5.5C5.5 5.5 6.5 1.5 10.8 1.5' stroke='%23140d06' stroke-width='3' stroke-linecap='round'/%3E%3Cpath d='M1.2 5.5C5.5 5.5 6.5 1.5 10.8 1.5' stroke='%23e8c890' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E") center/100% 100% no-repeat}   /* a curving road */
+  .stat i.br{width:calc(var(--u)*12);height:calc(var(--u)*7);border:0;border-radius:0;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 7'%3E%3Cpath d='M.5 .5H11.5V6.5H9.5A3.5 3.5 0 0 0 2.5 6.5H.5Z' fill='%23c08a4a' stroke='%23140d06'/%3E%3C/svg%3E") center/100% 100% no-repeat}   /* a small arch bridge */
+  #mhint{grid-column:1/-1;grid-row:4;text-align:center;white-space:nowrap;font-size:calc(var(--u)*12);font-weight:600;color:var(--dim);line-height:1.5;min-height:calc(var(--u)*18)}
+  .hg{display:inline-block;white-space:nowrap;margin:0 var(--u8)}
+  #mhint kbd{font:inherit;color:var(--ink);padding:0 var(--u4);border:var(--u) solid #4a5c94;background:rgba(255,255,255,.06);margin:0 var(--u2)}
+  @media (hover:none){ #mhint{display:none} }                       /* a touch screen has no arrow keys or Enter to explain */
+  @media (prefers-reduced-motion:reduce){ .slide.cur,.slide.out{transition-duration:.01s!important} }
+  /* ---- menu screens other than track select. .scrn: a full page on the menu background. .dimmed: a dim overlay on what is behind it, with a panel (.box). .popt: the option of every list. ---- */
+  .scrn,.dimmed{display:none;position:fixed;left:0;top:0;right:0;bottom:0;color:var(--ink);font-family:var(--body);font-weight:600;user-select:none;-webkit-user-select:none;flex-direction:column;align-items:center;justify-content:center}
+  .scrn.show,.dimmed.show{display:flex}
+  .scrn{background:var(--bgsc);z-index:30}
+  .dimmed{background:rgba(2,5,16,.6);z-index:20}
+  #dialog{z-index:40;background:rgba(2,5,16,.8)} #dialog .box{background:#070c1e} #dtitle{white-space:normal;text-wrap:balance} #dtext{white-space:pre-line} #dcookie{display:none;width:calc(var(--u)*72);height:calc(var(--u)*72);align-self:center;image-rendering:crisp-edges;image-rendering:pixelated} #dialog.cookie #dcookie{display:block;margin:var(--u8) 0 var(--u10)} #dialog.cookie #dlist{flex-direction:row;margin-top:var(--u10)} #dialog.cookie .popt{flex:1 1 0;min-width:0;box-sizing:border-box;padding:var(--u8) var(--u6);font-size:calc(var(--u)*15);line-height:1.2;text-align:center;text-wrap:balance}
+  .box{width:calc(var(--u)*420);box-sizing:border-box;padding:var(--u24) calc(var(--u)*32) var(--u16);background:rgba(7,12,30,.93);border:var(--u2) solid var(--line);box-shadow:0 0 calc(var(--u)*40) rgba(0,0,0,.6);display:flex;flex-direction:column;gap:var(--u8);text-align:center}
+  .goldh{margin:0;padding-right:var(--u4);font-family:var(--display);font-weight:400;letter-spacing:var(--u2);line-height:1.1;text-align:center;white-space:nowrap;background:var(--goldtxt);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(var(--u2) var(--u2) 0 #a00)}
+  .box h2{font-size:calc(var(--u)*40)}
+  .olist{display:flex;flex-direction:column;gap:calc(var(--u)*14);width:100%}
+  .popt{display:flex;align-items:center;justify-content:center;padding:var(--u8) var(--u16);background:#0c1330;border:var(--u2) solid #3a4a7c;color:#c4cde6;font-family:var(--display);font-weight:400;font-size:calc(var(--u)*21);letter-spacing:var(--u2);cursor:pointer;transition:border-color .12s,background .12s,color .12s}
+  .popt:hover{border-color:#7f93d0}
+  .popt.foc{border-color:var(--gold);color:var(--gold);background:rgba(255,212,0,.1);outline:var(--u3) solid #fff;outline-offset:var(--u3)}   /* the focused option (keyboard or mouse) */
+  .popt.danger{color:#ff6a58} .popt.off{color:#6a7696;cursor:default} .popt.gap{margin-top:var(--u12)}
+  .popt:has(.pval){justify-content:space-between}
+  .uhint{font-size:calc(var(--u)*12);font-weight:600;color:var(--dim);line-height:1.5;white-space:nowrap;text-align:center}
+  .uhint kbd,#mhint kbd{font:inherit;color:var(--ink);padding:0 var(--u4);border:var(--u) solid #4a5c94;background:rgba(255,255,255,.06);margin:0 var(--u2)}
+  @media (hover:none){ .uhint{display:none} }
+  /* intro */
+  #itit{font-size:calc(var(--u)*76);margin-bottom:calc(var(--u)*36)}
+  #ilist{width:calc(var(--u)*300)}
+  #iprog{margin-top:calc(var(--u)*22);min-height:calc(var(--u)*20);font-size:calc(var(--u)*13);font-weight:700;letter-spacing:var(--u);color:var(--dim)}
+  #iver{position:absolute;left:0;right:0;bottom:var(--u12);text-align:center;font-size:calc(var(--u)*11);color:var(--dim)}
+  #mver{grid-column:1/-1;grid-row:4;justify-self:end;align-self:center;font-size:calc(var(--u)*8);font-weight:400;font-style:italic;text-transform:lowercase;line-height:1.5;color:var(--dim)}      /* in the same grid row as the hint, at the right edge of the panel */
+  /* settings */
+  #stit{font-size:calc(var(--u)*50);margin-bottom:var(--u24)} #slist{width:calc(var(--u)*400)}
+  #snote{margin-top:var(--u10);min-height:calc(var(--u)*18);color:#ffb040;font-size:calc(var(--u)*12.5)}
+  #settings .uhint{position:absolute;left:0;right:0;bottom:calc(var(--u)*20)}
+  /* credits */
+  #ctit{font-size:calc(var(--u)*50);margin-bottom:var(--u16)}
+  #clines{display:grid;grid-template-columns:calc(var(--u)*130) calc(var(--u)*420);gap:var(--u10) var(--u16);margin-bottom:var(--u24);font-size:calc(var(--u)*14);font-weight:400;line-height:1.3;color:#d3dcf3}
+  .chead{text-align:right;font-weight:700;font-size:calc(var(--u)*12);letter-spacing:var(--u);line-height:calc(var(--u)*18);color:var(--dim)}
+  #clist{width:calc(var(--u)*300)}
+  #chint{margin-top:calc(var(--u)*36)}
+  /* controls: action, two slots, the pad's fixed button */
+  #ktit{font-size:calc(var(--u)*38);margin-bottom:var(--u6)}
+  #ktable{display:grid;grid-template-columns:calc(var(--u)*170) calc(var(--u)*130) calc(var(--u)*130) calc(var(--u)*60);gap:calc(var(--u)*5) var(--u8);align-items:center;font-size:calc(var(--u)*13);font-weight:700}
+  .khead{text-align:center;color:var(--dim);font-size:calc(var(--u)*11);letter-spacing:var(--u)}
+  .kname{color:var(--ink)} .kpad{text-align:center;color:var(--dim)}
+  .kslot{height:calc(var(--u)*27);display:flex;align-items:center;justify-content:center;background:#0c1330;border:var(--u) solid #3a4a7c;box-sizing:border-box;cursor:pointer}
+  .kslot:hover{border-color:#7f93d0} .kslot.none{color:#5c6888}
+  .kslot.foc{border-color:var(--gold);color:var(--gold);outline:var(--u2) solid #fff}
+  .kslot.wait{background:rgba(255,212,0,.18);color:#fff}
+  #kmouse{grid-column:span 2} .kgap{margin-top:var(--u8)}   /* MOUSE RACING (menu.js): one switch across both slots, set apart from the bindings */
+  #kbtns{display:flex;gap:var(--u12);margin-top:var(--u10);width:calc(var(--u)*514)}
+  #kbtns .popt{flex:1;font-size:calc(var(--u)*15);padding:var(--u6)}
+  #knote{margin-top:var(--u6);min-height:calc(var(--u)*18);font-size:calc(var(--u)*12.5);color:var(--gold)}
+  /* results */
+  #rplace{font-size:calc(var(--u)*40)}
+  #rclear{font-size:calc(var(--u)*15);font-weight:700;color:var(--dim)} #rclear.ok{color:var(--gold)}
+  #rtime{font-size:calc(var(--u)*14);color:var(--dim)}
+  #runlock{min-height:calc(var(--u)*22);font-size:calc(var(--u)*15);font-weight:700;margin-bottom:var(--u8)}
+  #rwin{margin-top:var(--u8);font-size:calc(var(--u)*15);font-weight:700} #rwin .goldh{font-size:calc(var(--u)*28)}
+  #phint{margin-top:var(--u4)}
+  /* the pause menu: the options, and with PAUSE_MENU_CONTROLS (the ctl class, setPauseList in menu.js; never in a cutscene's pause) the race controls beside them
+     (#pctl, refreshPauseControls in hud.js), each way to do one a key cap. Without it the box keeps its usual width */
+  #pbody{display:flex;gap:var(--u24);align-items:center} #pctl{display:none}
+  #pause.ctl .box{width:auto} #pause.ctl #plist{width:calc(var(--u)*356)}
+  #pause.ctl #pctl{min-width:calc(var(--u)*240);display:grid;grid-template-columns:auto 1fr;gap:var(--u6) var(--u16);align-items:center;padding:var(--u4) 0 var(--u4) var(--u24);border-left:var(--u2) solid var(--line);text-align:left;font-size:calc(var(--u)*14);white-space:nowrap}
+  #pctl .pch{grid-column:1/-1;color:var(--dim);font-size:calc(var(--u)*11);letter-spacing:var(--u);margin-bottom:var(--u2)}
+  #pctl .pcn{color:var(--ink)} #pctl .pck{display:flex;gap:var(--u4);align-items:center;color:var(--dim)} #pctl i{font-style:normal;margin:0 var(--u2)}
+  #pctl kbd{font:inherit;font-size:calc(var(--u)*13);min-width:calc(var(--u)*14);text-align:center;color:var(--ink);padding:0 var(--u6);border:var(--u) solid #4a5c94;background:rgba(255,255,255,.06)} #pctl kbd.none{color:#5c6888}
+  /* mouse racing: two buttons on the screen and a marker of where the cursor steers */
+  #mouseBtns,#msteerBar{display:none}
+  .mouserace body.play #mouseBtns{display:flex;position:fixed;right:16px;bottom:82px;gap:8px;font-family:var(--body)}
+  #mouseBtns div{padding:3px 10px;background:rgba(7,12,30,.8);border:2px solid #fff;color:#fff;font-size:14px;font-weight:700;cursor:pointer}
+  #mouseBtns div:hover{background:#2a3b6e}
+  .mouserace body.play #msteerBar{display:block;position:fixed;left:50%;bottom:20px;width:300px;height:4px;margin-left:-150px;background:rgba(255,255,255,.35);pointer-events:none}
+  #msteer{position:absolute;top:-5px;width:6px;height:14px;margin-left:-3px;background:#ff8c00;border:1px solid #000;left:50%}
+  #loading{font-family:'Kanit Bold Italic','Arial Black',Impact,sans-serif;font-weight:400;display:none;position:fixed;left:0;top:0;right:0;bottom:0;align-items:center;justify-content:center;background:#000;color:#ffd400;font-size:36px;letter-spacing:3px}
+  body.loading #loading{display:flex}
+  #msg{left:0;right:0;top:26%;text-align:center;font-size:clamp(56px,min(12vw,22vh),140px);line-height:1.05}
+  #msg.long{font-size:clamp(28px,min(4.8vw,9vh),58px)}                 /* sentences (finish text) are set smaller than the one-word GO! / REKT / countdown */
+  /* the big countdown / GO! / REKT / finish text and the place text wear the menu header style: gold gradient caps with a red offset shadow */
+  #msg,#pos{font-family:var(--display);font-weight:400;background:linear-gradient(180deg,#fff6a0 0%,#ffd400 48%,#ff8a00 100%);-webkit-background-clip:text;background-clip:text;color:transparent;text-shadow:none;filter:drop-shadow(4px 4px 0 #a00) drop-shadow(0 0 8px rgba(0,0,0,.55))}
+  #pos{filter:drop-shadow(2px 2px 0 #a00) drop-shadow(0 0 5px rgba(0,0,0,.55))}
+  #sub{left:0;right:0;top:46%;text-align:center;font-size:calc(var(--hu)*24)}
+  /* tips of the first played level (js/tutorial.js): under the car, above the controls help and the bars; the key to press in gold. A symbol on each side, centred
+     on the text (TUT_ICONS: vector art, outlined in the HUD navy by .ol, the red offset shadow like the text's; --tip is their pop-in scale) */
+  #tut{left:50%;transform:translateX(-50%);bottom:calc(50px + 5vh);width:min(98vw,31em);display:flex;align-items:center;justify-content:center;gap:.45em;text-align:center;opacity:0;font-family:var(--display);font-weight:400;
+    font-size:clamp(20px,min(3.3vw,5.6vh),40px);line-height:1.12;letter-spacing:.5px;text-wrap:balance;color:#fff;
+    text-shadow:2px 0 0 #0b1638,-2px 0 0 #0b1638,0 2px 0 #0b1638,0 -2px 0 #0b1638,2px 2px 0 #0b1638,-2px -2px 0 #0b1638,2px -2px 0 #0b1638,-2px 2px 0 #0b1638,4px 4px 0 #a00,0 0 10px rgba(0,0,0,.6)}
+  #tut .k{color:#ffd400}
+  #tut .nw{white-space:nowrap}
+  #tut .tt{flex:0 1 auto;max-width:min(70vw,24em)}
+  #tut .ti{flex:none;width:2.1em;height:2.1em;overflow:visible;transform:scale(var(--tip,1));filter:drop-shadow(3px 3px 0 #a00) drop-shadow(0 0 6px rgba(0,0,0,.5))}
+  #tut .ol *{fill:#0b1638;stroke:#0b1638;stroke-width:2.6px;stroke-linejoin:round;stroke-linecap:round}
+  #tut .ol [fill=none]{fill:none;stroke-width:5px}
+  /* cutscenes (js/cutscene.js, the ending): the race HUD goes, black letterbox bars come, and the dialogue box sits over the lower bar: the speaker's name in Kanit
+     (MCP in the gold header style, the racer in red), the line in Titillium, typed out. #cfade is the fade to and from black. Under the pause menu (z-index 20) */
+  #cine{display:none;position:fixed;left:0;top:0;right:0;bottom:0;pointer-events:none;z-index:10;--cbar:13vh}
+  body.cine #cine{display:block}
+  body.cine .hud,body.cine #mini,body.cine #mouseBtns,body.cine #msteerBar{display:none!important}
+  #cine .cbar{position:absolute;left:0;right:0;height:var(--cbar);background:#000} #cine .ctop{top:0} #cine .cbot{bottom:0}
+  #cine.inpic #cbox{bottom:calc(var(--cbar) + var(--u8))}                 /* CUTSCENE_TEXT_IN_PICTURE (config.js): at the bottom of the picture, above the black bar */
+  #cbox{position:absolute;left:50%;bottom:var(--u8);transform:translateX(-50%);width:min(90vw,calc(var(--u)*660));box-sizing:border-box;padding:var(--u4) var(--u16) var(--u6);
+    background:rgba(7,12,30,.86);border:var(--u2) solid var(--line);box-shadow:var(--u3) var(--u3) 0 rgba(0,0,0,.6);opacity:0;transition:opacity .25s}
+  #cbox.on{opacity:1}
+  #cwho{font-family:var(--display);font-weight:400;font-size:calc(var(--u)*21);letter-spacing:var(--u);line-height:1.2;display:inline-block;padding-right:var(--u4);
+    background:var(--goldtxt);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(var(--u2) var(--u2) 0 #a00)}
+  #cwho.racer{background:linear-gradient(180deg,#ffb0a0 0%,#ff4a30 55%,#c01008 100%);-webkit-background-clip:text;background-clip:text;filter:drop-shadow(var(--u2) var(--u2) 0 #300)}
+  #cline{font-family:var(--body);font-weight:600;font-size:calc(var(--u)*18);line-height:1.25;color:var(--ink);min-height:2.5em;white-space:pre-line}   /* (pre-line: a \n in a line is a line break) */
+  #cline em{font-style:italic;font-weight:700;color:#fff}
+  #cfade{position:absolute;left:0;top:0;right:0;bottom:0;background:#000;opacity:0}
+  #mrace,.bico{display:none}                                          /* only #mobileCss ever shows these */
+  /* debug: ?ui=false (noUI, js/input.js) hides the in-game UI, for screenshots: HUD, minimap, mouse-racing buttons and the cutscene dialogue box (a cutscene keeps its letterbox and fades); every menu still shows */
+  html.noui .hud,html.noui #mini,html.noui #mouseBtns,html.noui #msteerBar,html.noui #cbox{display:none!important}
+</style>
+<style id="mobileCss">   /* removed at load when MOBILE_MENU (config.js) is off */
+  /* ---- phones, tablets and narrow windows: the same elements, rearranged. Everything is sized in --u, so redefining it scales every screen; these rules only move what no longer fits. Plain desktop windows match none of them.
+     Portrait: header row with icon buttons, difficulty, the track panel, all the miniatures, RACE (in thumb reach). Short portrait: the map moves beside the numbers. Short landscape: no title, two columns.
+     Large touch landscape: the desktop layout, with RACE and taller buttons. html.touch (input.js: the last input was a finger) drops the focus frame of the lists and the hover colours. */
+  :root{--vh:100vh;--pad:calc(env(safe-area-inset-top) + var(--u8)) calc(env(safe-area-inset-right) + var(--u12)) calc(env(safe-area-inset-bottom) + var(--u10)) calc(env(safe-area-inset-left) + var(--u12))}
+  @supports (height:100dvh){ :root{--vh:100dvh} }
+  html{overscroll-behavior:none}
+  .scrn,.dimmed{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+  .bico{display:none;width:52%;height:52%;fill:none;stroke:currentColor;stroke-width:2}
+  #mrace{display:none;align-items:center;justify-content:center;gap:var(--u8);height:max(48px,calc(var(--u)*50));box-sizing:border-box;font-family:var(--display);font-size:calc(var(--u)*24);letter-spacing:var(--u3);color:#1c0d00;background:linear-gradient(180deg,#ffe96a 0%,#ffd400 50%,#ff9d00 100%);border:var(--u2) solid #fff3a8;cursor:pointer;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}
+  #mrace:active{filter:brightness(.82)}
+  #mrace.locked{color:#93a0c4;background:#0c1330;border-color:#3a4a7c}
+  #mrace svg{width:.85em;height:.85em}
+  .touch .popt.foc{border-color:#3a4a7c;color:#c4cde6;background:#0c1330;outline:none}
+  .touch .popt.danger.foc{color:#ff6a58} .touch .popt.off.foc{color:#6a7696}
+  .touch .popt:active{border-color:var(--gold);color:var(--gold);background:rgba(255,212,0,.1)}
+  .touch .popt:hover,.touch .mbtn:hover{border-color:#3a4a7c}
+  .touch .thumb:hover{border-color:#3a4a7c} .touch .thumb.sel:hover{border-color:var(--gold)}
+  .touch #gbar:hover #gthumb{background:#3a4a7c} .touch #gbar.drag #gthumb{background:var(--gold)}
+  .touch #stage:hover{border-color:var(--line)}
+  .touch .sarrow.on:hover{background:none} .touch .sarrow.on:active{background:rgba(255,255,255,.2)}
+  /* large touch landscape: the desktop layout plus RACE, which sits at the bottom of the panel */
+  @media (min-aspect-ratio:1001/1000) and (hover:none) and (min-width:801px) and (min-height:501px){
+    body.menu #menu{grid-template-rows:auto auto min(calc(var(--u)*450),calc(var(--vh) - var(--u)*150)) auto}   /* a 4:3 screen has height to spare: the map gets it */
+    body.menu #mrace{display:flex;grid-column:2;grid-row:3;align-self:end;height:calc(var(--u)*42);margin:0 var(--u16) var(--u12);font-size:calc(var(--u)*20)}
+    #desc{padding-bottom:calc(var(--u)*64)}
+    .mbtn{height:max(44px,calc(var(--u)*40))} .sarrow{flex-basis:max(44px,calc(var(--u)*44))} #rdiff{height:max(44px,calc(var(--u)*36))}
+  }
+  /* what portrait and short landscape share */
+  @media (max-aspect-ratio:1/1),(min-aspect-ratio:1001/1000) and (max-height:500px),(min-aspect-ratio:1001/1000) and (hover:none) and (max-width:800px){
+    body.menu #menu{padding:var(--pad);justify-content:stretch;align-content:stretch;column-gap:var(--u10);row-gap:var(--u8)}
+    body.menu #mrace{display:flex}
+    #mhint,#mver{display:none} #desc{padding:var(--u8) var(--u10) var(--u10)}
+    #menu.many #grid{margin-right:calc(var(--u10) - var(--gpad))} #gbar{margin-right:0;width:var(--u4)}   /* no gap to stand in: the miniatures make room for the rail */
+    #snum{white-space:nowrap;letter-spacing:var(--u);font-size:calc(var(--u)*11)}
+    #sname{font-size:calc(var(--u)*27);margin:var(--u2) 0 var(--u2)} #sloc{margin-bottom:var(--u6)}
+    .mbtn{height:max(44px,calc(var(--u)*40))} .sarrow{flex-basis:max(44px,calc(var(--u)*44))} #rdiff{height:max(40px,calc(var(--u)*40));width:min(100%,calc(var(--u)*300))}
+    .scrn,.dimmed{justify-content:flex-start;justify-content:safe center;overflow-y:auto;box-sizing:border-box;padding:var(--pad)}
+    .uhint{white-space:normal} #settings .uhint{position:static;margin-top:var(--u8)}
+    #slist,#clist,#ilist{max-width:100%}
+    .box{max-width:100%;max-height:100%;overflow-y:auto;padding:var(--u16) var(--u16) var(--u12)}
+    .box .goldh,#stit,#ctit,#ktit{flex:none}
+    #ktable{width:100%;max-width:calc(var(--u)*514);grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) minmax(0,1fr) auto} .kslot{height:max(40px,calc(var(--u)*27))}
+    #kbtns{width:100%;max-width:calc(var(--u)*514)}
+    #clines{grid-template-columns:minmax(0,1fr);max-width:100%;gap:var(--u2)} .chead{text-align:left;margin-top:var(--u8)}
+    #iver{position:static;margin-top:var(--u16)}
+  }
+  /* portrait: one column, the header's two buttons become icons */
+  @media (max-aspect-ratio:1/1){
+    :root{--u:min(calc(100vw / 400),calc(var(--vh) / 720))}
+    body.menu #menu{grid-template-columns:auto minmax(0,1fr) auto;grid-template-rows:auto auto minmax(0,1fr) auto auto}
+    #title{grid-column:2;grid-row:1;align-self:center;padding-right:0;font-size:calc(var(--u)*28);letter-spacing:var(--u);white-space:nowrap}
+    #mback{grid-column:1;grid-row:1} #msettings{grid-column:3;grid-row:1}
+    .mbtn{width:max(44px,calc(var(--u)*44))} .mbtn .btxt{display:none} .mbtn .bico{display:block}
+    #rdiff{grid-row:2;grid-column:1/-1}
+    #desc{grid-column:1/-1;grid-row:3}
+    #grid{--cellv:min(calc((100vw - var(--u24) - env(safe-area-inset-left) - env(safe-area-inset-right)) / 6 - var(--u6)),calc(var(--vh)*.105));grid-column:1/-1;grid-row:4;height:calc(var(--cellv)*4 + var(--ggap)*3)}
+    #gbar{grid-column:1/-1;grid-row:4}
+    .tlock{font-size:calc(var(--u)*13)} .tlock svg{width:calc(var(--u)*17);height:calc(var(--u)*17)} .tstar{width:calc(var(--u)*15);height:calc(var(--u)*15);right:var(--u2);top:var(--u2)}
+    body.menu #mrace{grid-column:1/-1;grid-row:5}
+    #info{flex-direction:column;gap:var(--u6);margin-top:var(--u6)}
+    #sstats{grid-template-columns:repeat(4,auto);justify-content:space-between}
+    #sblurb{flex:none;margin:0;padding:0;border:0;font-size:calc(var(--u)*13.5);min-height:3.8em}
+    #itit{font-size:calc(var(--u)*42)} #ilist{width:min(100%,calc(var(--u)*300))}
+    #pbody{flex-direction:column;align-items:stretch;gap:var(--u12)} #plist{width:auto} #pctl{padding:var(--u10) 0 0;border-left:0;border-top:var(--u2) solid var(--line);justify-content:center}   /* the pause menu's controls under its options */
+    #stit,#ctit{font-size:calc(var(--u)*44)}
+  }
+  @media (max-aspect-ratio:1/1) and (min-width:600px){ :root{--u:min(calc(100vw / 640),calc(var(--vh) / 860))} #grid{--cellv:min(calc((100vw - var(--u24)) / 6 - var(--u6)),calc(var(--vh)*.09))} #sblurb{min-height:2.6em} }   /* tablets: more room, so everything is smaller relative to the screen */
+  /* short portrait: the map beside the numbers, smaller miniatures */
+  @media (max-aspect-ratio:1/1) and (max-height:700px){
+    #grid{--cellv:calc(var(--vh)*.072)}
+    #desc{display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-rows:auto auto auto minmax(0,1fr) auto;column-gap:var(--u10)}
+    #snum,#sname,#sloc{grid-column:1/-1}
+    #stage{grid-column:1;grid-row:4;height:100%;aspect-ratio:1}
+    #info{display:contents} #sstats{grid-column:2;grid-row:4;grid-template-columns:repeat(2,auto);align-content:center;gap:var(--u8) var(--u6)}
+    #sblurb{grid-column:1/-1;grid-row:5;margin-top:var(--u6);font-size:calc(var(--u)*13);min-height:0}
+  }
+  /* short landscape: the buttons and the difficulty in one row, the miniatures and the panel fill the rest; RACE sits at the bottom of the panel */
+  @media (min-aspect-ratio:1001/1000) and (max-height:500px),(min-aspect-ratio:1001/1000) and (hover:none) and (max-width:800px){
+    :root{--u:min(calc(100vw / 760),calc(var(--vh) / 400))}
+    body.menu #menu{grid-template-columns:minmax(0,46fr) minmax(0,54fr);grid-template-rows:auto minmax(0,1fr)}
+    #title{display:none} #snum{display:none}
+    #mback{grid-row:1;grid-column:1} #msettings{grid-row:1;grid-column:2} #rdiff{grid-row:1;grid-column:1/-1}
+    #grid{grid-row:2;--ggap:var(--u4)} #gbar{grid-row:2} #desc{grid-row:2} .tstar{width:calc(var(--u)*15);height:calc(var(--u)*15);right:var(--u2);top:var(--u2)}
+    #desc{display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr);column-gap:var(--u10);padding-bottom:calc(max(44px,var(--u)*44) + var(--u16))}
+    #sname{grid-column:1/-1;font-size:calc(var(--u)*23);margin:0} #sloc{grid-column:1/-1;margin-bottom:var(--u4)}
+    #stage{grid-column:1;grid-row:3;height:100%;aspect-ratio:1}
+    #info{grid-column:2;grid-row:3;min-height:0;flex-direction:column;gap:var(--u4);margin:0}
+    #sstats{gap:var(--u2) var(--u10)} #sblurb{flex:1;min-height:0;overflow-y:auto;margin:0;padding:0;border:0;font-size:max(11px,calc(var(--u)*12.5));line-height:1.22}
+    body.menu #mrace{grid-column:2;grid-row:2;align-self:end;height:max(44px,calc(var(--u)*44));margin:0 var(--u10) var(--u8);font-size:calc(var(--u)*20)}
+    #itit{font-size:calc(var(--u)*56);margin-bottom:var(--u16)} #stit,#ctit,#ktit{font-size:calc(var(--u)*34);margin-bottom:var(--u8)}
+    .olist{gap:var(--u8)} .popt{min-height:44px;box-sizing:border-box;padding:var(--u3) var(--u16)} .box{gap:var(--u4)} .box h2{font-size:calc(var(--u)*30)} #runlock{margin-bottom:0}
+    #clines{grid-template-columns:calc(var(--u)*130) minmax(0,calc(var(--u)*480));column-gap:var(--u16)} .chead{text-align:right;margin-top:0}
+  }
+  @media (min-aspect-ratio:1001/1000) and (max-height:500px),(min-aspect-ratio:1001/1000) and (hover:none) and (max-width:800px){ #dialog.cookie #dcookie{display:none} #dialog.cookie #dlist{margin-top:0} }   /* no room for it */
+  @media (min-aspect-ratio:1001/1000) and (max-width:600px){ #stage{display:none} #desc{grid-template-columns:minmax(0,1fr)} #info{grid-column:1} }   /* the smallest phones: the panel is too narrow for the map, and the selected miniature shows it anyway */
+</style>
+</head>
+<body>
+<div id="intro" class="scrn">
+  <h1 id="itit" class="goldh">CLANKER RACING</h1>
+  <div id="ilist" class="olist"></div>
+  <div id="iprog"></div>
+  <div id="iver"></div>
+</div>
+<div id="menu">
+  <h1 id="title">CLANKER RACING</h1>
+  <div id="mback" class="mbtn" role="button">&larr; BACK</div>
+  <div id="msettings" class="mbtn" role="button">SETTINGS</div>
+  <div id="rdiff" role="group" aria-label="Difficulty">
+    <div class="sarrow" id="dprev" role="button" aria-label="Easier"><svg viewBox="0 0 24 24"><path d="M15 3 6 12l9 9"/></svg></div>
+    <div id="rtext"><span class="dlbl">DIFFICULTY:</span><span id="dval"></span></div>
+    <div class="sarrow" id="dnext" role="button" aria-label="Harder"><svg viewBox="0 0 24 24"><path d="M9 3l9 9-9 9"/></svg></div>
+  </div>
+  <div id="grid" role="group" aria-label="All tracks"></div>
+  <div id="gbar" aria-hidden="true"><div id="gthumb"></div></div>
+  <div id="desc" role="group" aria-label="Track" aria-live="polite">
+    <div id="snum"></div><div id="sname"></div><div id="sloc"></div>
+    <div id="stage" role="img" aria-label="Preview of the selected track"><div id="slides"></div><div id="slock"></div></div>
+    <div id="info"><div id="sstats"></div><p id="sblurb"></p></div>
+  </div>
+  <div id="mrace" role="button"></div>
+  <div id="mhint"></div>
+  <div id="mver"></div>
+</div>
+<div id="loading"></div>
+<div id="pause" class="dimmed" role="dialog" aria-modal="true" aria-label="Paused"><div class="box"><h2 class="goldh">PAUSED</h2><div id="pbody"><div id="plist" class="olist"></div><div id="pctl"></div></div><div id="phint" class="uhint"></div></div></div>
+<div id="results" class="dimmed" role="dialog" aria-modal="true" aria-label="Results"><div class="box"><h2 id="rplace" class="goldh"></h2><div id="rclear"></div><div id="rtime"></div><div id="rwin"><div class="goldh">CONGRATULATIONS!</div>You have cleared every track. You beat the game!</div><div id="runlock"></div><div id="rlist" class="olist"></div></div></div>
+<div id="settings" class="scrn" role="dialog" aria-label="Settings"><h2 id="stit" class="goldh">SETTINGS</h2><div id="slist" class="olist"></div><div id="snote"></div><div id="shint" class="uhint"></div></div>
+<div id="credits" class="scrn" role="dialog" aria-label="Credits"><h2 id="ctit" class="goldh">CREDITS</h2><div id="clines"></div><div id="clist" class="olist"></div><div id="chint" class="uhint"></div></div>
+<div id="controls" class="scrn" role="dialog" aria-label="Controls"><h2 id="ktit" class="goldh">CONTROLS</h2><div id="ktable"></div><div id="kbtns"><div id="kreset" class="popt" role="button">RESET TO DEFAULTS</div><div id="kback" class="popt" role="button">BACK</div></div><div id="knote" aria-live="polite"></div><div id="khint" class="uhint"></div></div>
+<div id="dialog" class="dimmed" role="alertdialog" aria-modal="true"><div class="box"><h2 id="dtitle" class="goldh" style="font-size:calc(var(--u)*30)"></h2><canvas id="dcookie" width="32" height="32"></canvas><p id="dtext" style="margin:0 0 var(--u8)"></p><div id="dlist" class="olist"></div></div></div>
+<canvas id="gl"></canvas>
+<canvas id="mini" width="190" height="190"></canvas>
+<div class="hud" id="tl"></div>
+<div class="hud" id="pop"></div>
+<div class="hud" id="pos"></div>
+<div class="hud" id="tr"></div>
+<div class="hud" id="bl"></div>
+<div id="mouseBtns"><div id="mRespawn" role="button">BACK ON TRACK</div><div id="mPause" role="button">PAUSE</div></div>
+<div id="msteerBar"><div id="msteer"></div></div>
+<div class="hud" id="nitroLbl">NITROUS</div>
+<div id="nitroWrap" class="hud"><div id="nitroBar"></div></div>
+<div class="hud" id="ctlPrompt"></div>
+<div class="hud" id="dmgLbl">DAMAGE</div>
+<div id="dmgWrap" class="hud"><div id="dmgBar"></div></div>
+<div class="hud" id="msg"></div>
+<div class="hud" id="sub"></div>
+<div class="hud" id="tut"></div>
+<div id="cine" aria-live="polite"><div class="cbar ctop"></div><div class="cbar cbot"></div><div id="cbox"><div id="cwho"></div><div id="cline"></div></div><div id="cfade"></div></div>
+
+<script src="js/util.js"></script>
+<script src="js/config.js"></script>
+<script src="js/save.js"></script>
+<script src="js/world.js"></script>
+<script src="js/mesh.js"></script>
+<script src="js/level_registry.js"></script>
+<script src="js/levels/props.js"></script>
+<script src="js/levels/common.js"></script>
+<script src="js/levels/dirt.js"></script>
+<script src="js/levels/city.js"></script>
+<script src="js/levels/snow.js"></script>
+<script src="js/levels/volcanic.js"></script>
+<script src="js/levels/quarry.js"></script>
+<script src="js/levels/mars.js"></script>
+<script src="js/levels/forest.js"></script>
+<script src="js/levels/rome.js"></script>
+<script src="js/levels/moon.js"></script>
+<script src="js/levels/miami.js"></script>
+<script src="js/levels/london.js"></script>
+<script src="js/levels/market.js"></script>
+<script src="js/levels/refinery.js"></script>
+<script src="js/levels/junction.js"></script>
+<script src="js/levels/farm.js"></script>
+<script src="js/levels/hellcreek.js"></script>
+<script src="js/levels/carrier.js"></script>
+<script src="js/levels/machu.js"></script>
+<script src="js/levels/capetown.js"></script>
+<script src="js/levels/dune.js"></script>
+<script src="js/levels/titan.js"></script>
+<script src="js/levels/tibet.js"></script>
+<script src="js/levels/toyroom.js"></script>
+<script src="js/levels/datacenter.js"></script>
+<script src="js/levels/monsoon.js"></script>
+<script src="js/levels/ending.js"></script>
+<script src="js/carmodel.js"></script>
+<script src="js/gl.js"></script>
+<script src="js/input.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/particles.js"></script>
+<script src="js/render.js"></script>
+<script src="js/trails.js"></script>
+<script src="js/fx.js"></script>
+<script src="js/aicuts.js"></script>
+<script src="js/ailowg.js"></script>
+<script src="js/hud.js"></script>
+<script src="js/tutorial.js"></script>
+<script src="js/cutscene.js"></script>
+<script src="js/cookie.js"></script>
+<script src="js/flags.js"></script>
+<script src="js/menu.js"></script>
+<script>
+'use strict';
+// Core gameplay: car physics, race rules, AI opponents, camera, event handling and the main loop.
+// Everything else (world, levels, rendering, HUD, menu, audio) lives in js/.
+
+// ---------- car state & physics ----------
+const G=-38, MAXV=58, ACC=30, BRAKE=55;
+const car={x:0,y:0,z:0,vx:0,vy:0,vz:0,yaw:0,ux:0,uy:1,uz:0,nx:0,ny:1,nz:0,steer:0,spin:0,grounded:true,nitro:1,nitroWait:0,nitroLock:false,onTrack:true,idx:0,shake:0,
+  damage:0,inv:0,wreckT:0,airT:0,inWater:false,inLava:false,nitroOn:false,ice:false,events:[]};
+// LV.obstacles: things left on the road, [track index, lateral offset, half width] (parked vehicles, carts, burning oil, a fallen column).
+// steerRound moves a lane (lateral offset) to the far side of any of them within look samples ahead; freeLat moves a respawn out of them
+function steerRound(idx,look,lane){ if(LV.obstacles) for(const o of LV.obstacles){ const ahead=((o[0]-idx+M*1.5)%M)-M/2; if(ahead>-6&&ahead<look+30&&Math.abs(lane-o[1])<o[2]+3.8) lane=o[1]-Math.sign(o[1])*(o[2]+3.8); } return lane; }
+// the samples to the nearest obstacle ahead (within look) that lies in the lane, or null: a long lookahead would aim past it and cut through it
+function obstacleAhead(idx,look,lane){ let best=null; if(LV.obstacles) for(const o of LV.obstacles){ const ahead=((o[0]-idx+M*1.5)%M)-M/2; if(ahead>0&&ahead<look&&Math.abs(lane-o[1])<o[2]+3.8&&(best===null||ahead<best)) best=ahead; } return best; }
+function freeLat(idx,lat){ if(!LV.obstacles) return lat;
+  for(let n=0;n<3;n++){ let moved=false; for(const o of LV.obstacles){ const a=((o[0]-idx+M*1.5)%M)-M/2; if(Math.abs(a)<=5&&Math.abs(lat-o[1])<o[2]+2.5){ lat=o[1]-(Math.sign(o[1])||1)*(o[2]+2.5); moved=true; } } if(!moved) break; }
+  return clamp(lat,-(HALFW-2),HALFW-2); }
+function placeCar(idx,fromBehind){
+  const t=track[(idx+M)%M], lat=freeLat((idx+M)%M,0);
+  car.x=t.x+t.tz*lat; car.z=t.z-t.tx*lat; car.yaw=Math.atan2(t.tx,t.tz);
+  const dk=bridgeDeckAt(car.x,car.z); car.y=dk!==null?dk:hAt(car.x,car.z); car.vx=car.vy=car.vz=0; car.ux=0;car.uy=1;car.uz=0; car.nx=0;car.ny=1;car.nz=0;
+  car.grounded=true; car.steer=0; car.idx=(idx+M)%M;
+  for(const g of GATES) g.prevA=(car.x-g.x)*g.tx+(car.z-g.z)*g.tz;   // no false gate crossings after a teleport
+}
+function groundInfo(x,z,yaw,y){
+  const fx=Math.sin(yaw), fz=Math.cos(yaw), lx=fz, lz=-fx, L=1.5, W=1.0;
+  // on a level's raised deck a wheel over the edge reads the deck: the car stays level and on top until its centre is over the edge, then it falls clear of the side
+  const dc=LV.deckAt?LV.deckAt(x,z):null, floor=dc!==null&&y>dc-1.2?dc-1:-1e9, W4=(a,b)=>{ let h=Math.max(hAtY(a,b,y),floor); if(LV.slabAt){ const s=LV.slabAt(a,b); if(s!==null&&y>s-1.2&&s>h) h=s; } return h; };
+  // LV.slabAt(x,z) (optional): a raised surface only the cars feel, landed on from above and driven under from below; unlike LV.deckAt,
+  // respawns, checkpoints and the camera ignore it (Dragon Market's overpass, which the road runs under)
+  const hF=W4(x+fx*L,z+fz*L), hB=W4(x-fx*L,z-fz*L), hL=W4(x+lx*W,z+lz*W), hR=W4(x-lx*W,z-lz*W);
+  const sf=(hF-hB)/(2*L), sl=(hL-hR)/(2*W);
+  let nx=sf*lz-fz*sl, ny=fz*lx-fx*lz, nz=fx*sl-sf*lx; const l=Math.hypot(nx,ny,nz); nx/=l; ny/=l; nz/=l;
+  return {h:(hF+hB+hL+hR)/4, nx,ny,nz};
+}
+
+// damage for any car (all the numbers are in config.js). k = how much of `amount` it takes: by default the difficulty's damage factor for
+// the player and OPPONENT_ENVIRONMENT_FACTOR for an opponent. Cars that have finished the race are indestructible; nothing is hurt before GO.
+const isHuman=c=>c===car&&!AI_DRIVE;                                     // ?ai: the player's car is an opponent in every rule: bonuses, damage, nitro tank, fire
+function hurt(c,amount,k){
+  const done=c===car?race.state==='finished':c.fin;
+  if(done||c.inv>0||c.wreckT>0||race.state==='countdown'||race.state==='menu'||race.state==='loading') return;
+  c.damage=Math.min(1,c.damage+amount*(k!==undefined?k:isHuman(c)?DIFF.damage:OPPONENT_ENVIRONMENT_FACTOR));
+  if(c.damage>=1){ c.wreckT=WRECK_TIME; c.vx=c.vy=c.vz=0; c.events.push({t:'wreck'}); }
+}
+function afterWreck(cr){
+  cr.burn=false; cr.fireSafe=0;
+  if(cr!==car){ placeRacer(cr,cr.idx-3,0); cr.damage=0; cr.inv=2.5; cr.stuck=0; cr.off=0; cr.resp++; return; }   // an opponent: back on the road behind where it blew up
+  placeCar(respawnIndex()-3); car.damage=0; car.inv=2.5; car.stuck=0; car.off=0;
+  if(race.state==='race') race.goFlash=2.5;
+  car.events.push({t:'respawn'});
+}
+
+// bounce off something along the horizontal normal (nx,nz); hurts in proportion to the impact speed
+function bump(cr,nx,nz,soft){
+  const vn=cr.vx*nx+cr.vz*nz; if(vn>=0) return;
+  cr.vx-=nx*vn*1.35; cr.vz-=nz*vn*1.35; cr.vx*=0.75; cr.vz*=0.75;
+  const hit=-vn;
+  if(hit>OBSTACLE_HIT_MIN_SPEED) hurt(cr,clamp((hit-OBSTACLE_HIT_MIN_SPEED)*OBSTACLE_HIT_DAMAGE_PER_SPEED,0,OBSTACLE_HIT_MAX)*(soft?SOFT_OBSTACLE_FACTOR:1)*(LV.hitMul||1));   // (a level's hitMul: unforgiving walls)
+  if(hit>8){ cr.shake=Math.max(cr.shake,Math.min(1,hit/40)); cr.events.push({t:'hit',v:hit}); }
+}
+
+// a car that fell through the gap of an open bridge (London, B.leaf) into the river: it stays there (no automatic reset) but counts as off the road,
+// even though the road passes right over it; an opponent there takes the far-off-road damage (stepAI) until it wrecks or gets out
+function dunkCheck(cr){
+  for(const B of BRIDGES){ if(!B.leaf) continue; const dx=cr.x-B.cx, dz=cr.z-B.cz; if(dx*dx+dz*dz>B.R2||cr.y>B.top-1.5) continue;
+    return true; }
+  return false; }
+// the car against scenery: circles along its length (see stepCar); the body with its wheels is about 4.45 long and 2.8 wide
+let CAR_DISCS=DETAILED_CAR_COLLISION?[-.95,0,1.0]:[0], CAR_R=DETAILED_CAR_COLLISION?1.4:1.5;   // (body: nose 2.22, tail 2.15, wheels 1.4 to each side; DETAILED_CAR_COLLISION in config.js)
+function stepCar(dt,ctl,cr){
+  cr=cr||car;
+  if(cr.wreckT>0){ cr.wreckT-=dt; if(cr.wreckT<=0) afterWreck(cr); return; }
+  cr.inv=Math.max(0,cr.inv-dt);
+  // steering input smoothing
+  cr.steer+=clamp(ctl.steer-cr.steer,-6*dt,6*dt);
+  const nt=nearestTrack(cr.x,cr.z,cr.y); cr.idx=nt.i; cr.trackD=nt.d; cr.onTrack=nt.d<HALFW+1||(LV.pavedAt?LV.pavedAt(cr.x,cr.z):false);
+  cr.ice=LV.iceAt(cr.x,cr.z,nt); const P=LV.phys;      // surface grip comes from the level
+  cr.soft=LV.softAt?LV.softAt(cr.x,cr.z,cr.onTrack,nt):0;                // soft ground (sand, mud): slows the car down and loosens its grip
+  cr.puddle=(LV.puddleAt&&cr.onTrack)?LV.puddleAt(cr.x,cr.z):0;      // a puddle on the road: spray
+  const slick=cr.ice||cr.puddle>0;                                       // puddles (water in London, oil on Titan) handle like ice
+  // nitro: every use restarts a NITRO_WAIT second pause before the tank starts refilling; with NITRO_LOCKOUT any use also
+  // locks nitro until the tank is full again (otherwise it is usable again as soon as it has refilled a bit)
+  // running dry while the key is held ignores the key until it is released and pressed again
+  const nitroWait=NITRO_WAIT*(isHuman(cr)?DIFF.nitroWait:1), nitroRefill=NITRO_REFILL*(isHuman(cr)?DIFF.nitroRefill:1);   // (difficulty only changes the player's tank)
+  if(!ctl.nitro) cr.nitroSpent=false;
+  const endless=INFINITE_NITRO||DIFF.explore;                             // (exploration: the player is the only car)
+  const nitroOn=ctl.nitro && ctl.thr>0 && !cr.nitroSpent && (endless || (cr.nitro>0 && (!cr.nitroLock || cr.nitroOn)));   // (a boost in progress carries on; the lock stops a new one)
+  cr.nitroOn=nitroOn;
+  if(endless) cr.nitro=1;
+  else if(nitroOn){ cr.nitro=Math.max(0,cr.nitro-NITRO_DRAIN*dt); cr.nitroWait=nitroWait; if(NITRO_LOCKOUT) cr.nitroLock=true; if(cr.nitro<=0) cr.nitroSpent=true; }
+  else if(cr.nitroWait>0) cr.nitroWait-=dt;
+  else { cr.nitro=Math.min(1,cr.nitro+nitroRefill*dt); if(cr.nitro>=1) cr.nitroLock=false; }
+  const wet=inRiver(cr.x,cr.z,cr.y);
+  if(wet&&!cr.inWater&&Math.hypot(cr.vx,cr.vz)>8) cr.events.push({t:'splash'});
+  cr.inWater=wet;
+  cr.dunk=wet&&dunkCheck(cr); if(cr.dunk) cr.onTrack=false;
+  cr.inLava=inLava(cr.x,cr.z,cr.y);
+  fxHurt(cr,dt);                                                          // fire, sparks and lasers
+  if(!cr.grounded) cr.airT+=dt;
+
+  let spd=Math.hypot(cr.vx,cr.vz);
+  if(cr.grounded){
+    // steering first (yaw), then decompose velocity in the new frame so slip emerges naturally
+    const fx0=Math.sin(cr.yaw), fz0=Math.cos(cr.yaw);
+    const vf0=cr.vx*fx0+cr.vz*fz0, dir=vf0<-0.5?-1:1;
+    const rate=2.1/(1+Math.abs(vf0)/40)*Math.min(1,Math.abs(vf0)/7)*(ctl.hb?1.5:1);
+    cr.yaw-=cr.steer*rate*dt*dir;
+
+    const fx=Math.sin(cr.yaw), fz=Math.cos(cr.yaw);
+    const n=[cr.nx,cr.ny,cr.nz];
+    // tilted forward & left, projected onto the ground plane
+    let ff=[fx-n[0]*(fx*n[0]+fz*n[2]), -n[1]*(fx*n[0]+fz*n[2]), fz-n[2]*(fx*n[0]+fz*n[2])];
+    let fl=Math.hypot(ff[0],ff[1],ff[2]); ff=[ff[0]/fl,ff[1]/fl,ff[2]/fl];
+    const lf=[n[1]*ff[2]-n[2]*ff[1], n[2]*ff[0]-n[0]*ff[2], n[0]*ff[1]-n[1]*ff[0]];
+    let vf=cr.vx*ff[0]+cr.vy*ff[1]+cr.vz*ff[2];
+    let vl=cr.vx*lf[0]+cr.vy*lf[1]+cr.vz*lf[2];
+
+    // AI cars (difficulty): vmul = top speed multiplier, offMul = how much of the off-road penalty they suffer, gripMul = tyre grip
+    const ofs=cr.offMul===undefined?1:cr.offMul;
+    const maxV=MAXV*(cr.vmul||1)*(nitroOn?1.4:1)*(cr.onTrack?1:lerp(1,P.maxOff,ofs))*(wet?0.6:1)*(slick?0.85:1)*(1-0.32*cr.soft)*(isHuman(cr)&&cr.burn?FIRE_MAX_SPEED:1);
+    let acc=0;
+    const tr=(slick?0.55:1)*(1-0.2*cr.soft);                                  // wheels spin on ice
+    if(ctl.thr){ acc=ACC*(cr.vmul||1)*tr*(1-Math.max(vf,0)/maxV); if(nitroOn) acc+=34*tr; }
+    if(ctl.brk){ if(vf>1.5) vf-=BRAKE*(slick?0.3:1)*dt;
+      else if(ctl.halt) vf-=Math.sign(vf)*Math.min(Math.abs(vf),BRAKE*(slick?0.3:1)*dt);   // finished: brake to a standstill, never reverse
+      else acc=-22*clamp(1+vf/18,0,1); }
+    vf+=acc*dt;
+    if(isHuman(cr)&&cr.burn&&vf>maxV) vf-=Math.min(vf-maxV,FIRE_SLOW_RATE*dt);            // on fire: the lower top speed bites at once (the engine alone would take several seconds to shed the speed)
+    vf-=vf*(wet?1.0:slick?P.dragIce:(cr.onTrack?P.dragRoad:lerp(P.dragRoad,P.dragOff,ofs))+0.12*cr.soft)*dt;
+    if(!ctl.thr&&!ctl.brk) vf-=Math.sign(vf)*Math.min(Math.abs(vf),7*dt);
+    const grip=(ctl.hb?1.1:(wet?3.0:slick?P.gripIce:(cr.onTrack?P.gripRoad:lerp(P.gripRoad,P.gripOff,ofs))))*(cr.gripMul||1)*(1-0.25*cr.soft);
+    vl*=Math.exp(-grip*dt);
+    if(ctl.hb) vf-=vf*0.35*dt;
+
+    cr.vx=ff[0]*vf+lf[0]*vl; cr.vy=ff[1]*vf+lf[1]*vl; cr.vz=ff[2]*vf+lf[2]*vl;
+    cr.spin+=vf/0.62*dt;
+  } else {
+    cr.yaw-=cr.steer*0.7*dt;
+    cr.spin+=spd/0.62*dt*0.6;
+  }
+  cr.vy+=(LV.phys.g||G)*dt;                                  // some levels have their own gravity
+  cr.x+=cr.vx*dt; cr.y+=cr.vy*dt; cr.z+=cr.vz*dt;
+
+  // static obstacles: circles (trees, rocks, posts, rails, lamps) ... Each is only as tall as what is drawn over it (clearOf, fitCollisionHeights in mesh.js)
+  // The car meets scenery as CAR_DISCS circles of radius CAR_R along its length (its centre, nose and tail), so neither the nose sinks into a
+  // wall nor the side stops short of one; each pushes the whole car out. One pass over the shapes: only those near the car test the circles
+  const hx=Math.sin(cr.yaw), hz=Math.cos(cr.yaw), B=4.5;                // B: farther than any circle reaches from the car's centre
+  for(const c of colliders){
+    if(Math.abs(cr.x-c[0])>c[2]+B||Math.abs(cr.z-c[1])>c[2]+B) continue;
+    if(c[4]!==undefined && cr.y<c[4]-2) continue;
+    for(const o of CAR_DISCS){
+      const dx=cr.x+hx*o-c[0], dz=cr.z+hz*o-c[1], rr=c[2]+CAR_R, d2=dx*dx+dz*dz;
+      if(d2<rr*rr&&!clearOf(c,cr.y)){ const d=Math.sqrt(d2)||0.001, nx=dx/d, nz=dz/d;
+        cr.x+=nx*(rr-d); cr.z+=nz*(rr-d); bump(cr,nx,nz,c[3]===2); } }
+  }
+  // ... thin walls (fences, rails): the nearest point of the segment pushes the car out, so there is no gap to slip through
+  for(const w of walls){
+    const e=w[4]+B; if(cr.x<(w[0]<w[2]?w[0]:w[2])-e||cr.x>(w[0]>w[2]?w[0]:w[2])+e||cr.z<(w[1]<w[3]?w[1]:w[3])-e||cr.z>(w[1]>w[3]?w[1]:w[3])+e) continue;
+    if(w[6]!==undefined && cr.y<w[6]-2) continue;
+    const ax=w[0], az=w[1], ex=w[2]-ax, ez=w[3]-az, l2=ex*ex+ez*ez, rr=w[4]+CAR_R;
+    for(const o of CAR_DISCS){
+      const px=cr.x+hx*o-ax, pz=cr.z+hz*o-az, u=l2>1e-6?clamp((px*ex+pz*ez)/l2,0,1):0, dx=px-ex*u, dz=pz-ez*u, d2=dx*dx+dz*dz;
+      if(d2>=rr*rr||clearOf(w,cr.y)) continue;
+      if(w[7]!==undefined && cr.y>lerp(w[7],w[8],u)-1.2) continue;         // the side of a raised deck: a car on top is above it
+      let nx,nz,d=Math.sqrt(d2);
+      if(d>1e-4){ nx=dx/d; nz=dz/d; }
+      else { const l=Math.sqrt(l2)||1; nx=-ez/l; nz=ex/l; if(nx*cr.vx+nz*cr.vz>0){ nx=-nx; nz=-nz; } d=0; }    // exactly on the wall: leave on the side it came from
+      cr.x+=nx*(rr-d); cr.z+=nz*(rr-d); bump(cr,nx,nz,w[5]===2); }
+  }
+  // ... and boxes (city buildings)
+  for(const r of rects){
+    if(Math.abs(cr.x-r[0])>r[2]+B||Math.abs(cr.z-r[1])>r[3]+B||clearOf(r,cr.y)) continue;
+    for(const o of CAR_DISCS){
+      const X=cr.x+hx*o, Z=cr.z+hz*o, dx0=X-r[0], dz0=Z-r[1];
+      const qx=clamp(X,r[0]-r[2],r[0]+r[2]), qz=clamp(Z,r[1]-r[3],r[1]+r[3]), dx=X-qx, dz=Z-qz, d2=dx*dx+dz*dz, R=CAR_R+.1;
+      if(d2>=R*R) continue;
+      let nx,nz,pen;
+      if(d2>1e-6){ const d=Math.sqrt(d2); nx=dx/d; nz=dz/d; pen=R-d; }
+      else { const ox=r[2]-Math.abs(dx0), oz=r[3]-Math.abs(dz0);     // centre inside the box: leave by the shallowest side
+        if(ox<oz){ nx=Math.sign(dx0)||1; nz=0; pen=ox+R; } else { nx=0; nz=Math.sign(dz0)||1; pen=oz+R; } }
+      cr.x+=nx*pen; cr.z+=nz*pen; bump(cr,nx,nz,false); }
+  }
+  const lim=HALF-8;
+  if(cr.x<-lim){cr.x=-lim;cr.vx=Math.max(cr.vx,0);} if(cr.x>lim){cr.x=lim;cr.vx=Math.min(cr.vx,0);}
+  if(cr.z<-lim){cr.z=-lim;cr.vz=Math.max(cr.vz,0);} if(cr.z>lim){cr.z=lim;cr.vz=Math.min(cr.vz,0);}
+
+  // ground contact
+  const gi=groundInfo(cr.x,cr.z,cr.yaw,cr.y), gap=cr.y-gi.h;
+  const vnNow=cr.vx*gi.nx+cr.vy*gi.ny+cr.vz*gi.nz;
+  // stick to the surface over small bumps, but leave it when moving fast away from it (ramp lips, crests)
+  if(gap<=0 || (cr.grounded && gap<0.07)){
+    const vn=vnNow;
+    if(!cr.grounded){
+      if(vn<-LANDING_MIN_SPEED){ cr.shake=Math.max(cr.shake,Math.min(1,-vn/50)); hurt(cr,(-vn-LANDING_MIN_SPEED)*LANDING_DAMAGE_PER_SPEED+Math.max(0,-vn-LARGE_FALL_SPEED)*LARGE_FALL_DAMAGE_PER_SPEED); }
+      if(vn<-12 || cr.airT>0.3) cr.events.push({t:'land',v:-vn,air:cr.airT});
+      cr.airT=0;
+    }
+    cr.vx-=gi.nx*vn; cr.vy-=gi.ny*vn; cr.vz-=gi.nz*vn;
+    cr.y=gi.h; cr.grounded=true; cr.nx=gi.nx; cr.ny=gi.ny; cr.nz=gi.nz;
+  } else cr.grounded=false;
+
+  // smooth the visual up-vector
+  const tx=cr.grounded?gi.nx:0, ty=cr.grounded?gi.ny:1, tz=cr.grounded?gi.nz:0, k=1-Math.exp(-(cr.grounded?14:1.2)*dt);
+  cr.ux=lerp(cr.ux,tx,k); cr.uy=lerp(cr.uy,ty,k); cr.uz=lerp(cr.uz,tz,k);
+  const ul=Math.hypot(cr.ux,cr.uy,cr.uz); cr.ux/=ul; cr.uy/=ul; cr.uz/=ul;
+  cr.shake=Math.max(0,cr.shake-dt*2.5);
+}
+
+function carMatrix(c){
+  c=c||car;
+  const fx=Math.sin(c.yaw), fz=Math.cos(c.yaw), u=[c.ux,c.uy,c.uz];
+  const d=fx*u[0]+fz*u[2];
+  let f=[fx-u[0]*d, -u[1]*d, fz-u[2]*d]; const fl=Math.hypot(f[0],f[1],f[2]); f=[f[0]/fl,f[1]/fl,f[2]/fl];
+  const l=[u[1]*f[2]-u[2]*f[1], u[2]*f[0]-u[0]*f[2], u[0]*f[1]-u[1]*f[0]];
+  return M4.basis(l,u,f,[c.x,c.y+0.05,c.z]);
+}
+
+
+// ---------- race state ----------
+const race={state:'menu',t:0,countdown:3,lap:1,next:0,lapStart:0,best:null,finishT:0,goFlash:0,place:0,
+  popText:'',popT:0,popBad:false,missCool:0,backT:0,wrongWay:false};
+function setPop(text,bad){ race.popText=text; race.popBad=!!bad; race.popT=2.4; }
+// the opponents' settings for this race (AID): the difficulty (exploration: easy's, for ?ai), with the level's own adjustments on top (LV.ai, LEVEL_AI_MULTIPLIERS in config.js),
+// plus harderTurns on the first played level (FIRST_LEVEL_EASIER, firstLevel in tutorial.js)
+let AID=null;
+function levelAI(D){
+  const tags=(LV.ai||[]).slice(); if(FIRST_LEVEL_EASIER&&firstLevel()&&!tags.includes('harderTurns')) tags.push('harderTurns');
+  if(!tags.length) return D;
+  const r=Object.assign({},D);
+  for(const t of tags){ const e=LEVEL_AI_MULTIPLIERS[t]; if(!e){ console.warn('unknown LEVEL_AI_MULTIPLIERS entry',t); continue; }
+    for(const k in e) r[k]=(r[k]??1)*e[k]; }                         // (a field missing from the difficulty counts as 1)
+  return r;
+}
+function startRace(){
+  AID=levelAI(DIFF.explore?DIFFICULTIES.easy:DIFF);                     // (before spawnAI; read again at every start, so a difficulty change between races counts)
+  placeCar(-14); race.state='countdown'; race.countdown=AUTO?0.01:3.2; race.t=0; race.lap=1; race.next=0; race.lapStart=0; race.best=null;
+  race.goFlash=0; race.goSaid=false; race.popT=0; race.missCool=0; race.backT=0; race.wrongWay=false;
+  car.nitro=1; car.nitroWait=0; car.nitroLock=false; car.nitroSpent=false; car.shake=0; car.damage=0; car.inv=0; car.wreckT=0; car.airT=0; car.events.length=0; car.burn=false; car.fireSafe=0;
+  tutStart();                                                           // (the tips of the first played level, js/tutorial.js)
+  // debug hooks: ?at=<track position 0..1>  ?dmg=<0..1>  ?speed=<units/s>  ?cam=<side camera distance>
+  const at=/[?&]at=([\d.]+)/.exec(location.search), dm=/[?&]dmg=([\d.]+)/.exec(location.search);
+  if(at){ placeCar(trackIndexAt(+at[1])-14); race.next=NG; for(let k=0;k<NG;k++) if(GATES[k].s>track[car.idx].s){ race.next=k; break; } }
+  if(dm) car.damage=+dm[1];
+  const sp=/[?&]speed=([\d.]+)/.exec(location.search); if(sp){ car.vx=Math.sin(car.yaw)*+sp[1]; car.vz=Math.cos(car.yaw)*+sp[1]; }
+  const ps=/[?&]pos=(-?[\d.]+),(-?[\d.]+)(?:,(-?[\d.]+))?/.exec(location.search);   // debug: ?pos=x,z[,yaw] puts the car there
+  if(ps){ car.x=+ps[1]; car.z=+ps[2]; if(ps[3]!==undefined) car.yaw=+ps[3]; car.y=hAt(car.x,car.z); }
+  race.place=0; race.resT=0; race.earned=null; spawnAI(car.idx+14);
+  if(AID.cutCorners) cutLine(AID.cutCorners);                           // (planned now, not in the first frames of the race)
+  lowgCaps();                                                           // (low gravity: the same)
+  if(AI_DRIVE){ const D=AID; Object.assign(car,{def:AI_PLAYER_DEF,offMul:D.offRoad,gripMul:D.roadHold,vmul:1,nitroGo:false,stuck:0,off:0,prog:0}); }   // ?ai: an opponent's settings (see spawnAI)
+  cam.yaw=car.yaw; parts.length=0; trails.length=0; fxPrewarm();
+}
+// where a respawn puts you: the nearest road position, but never past a checkpoint you haven't passed yet
+function respawnIndex(){
+  let i=car.idx;
+  if(race.state==='race'&&!DIFF.explore){
+    const nextS=race.next<NG?GATES[race.next].s:0, ahead=wrapS(track[i].s-nextS);
+    if(ahead>0&&ahead<0.4) i=GATES[race.next].i-6;
+  }
+  return i;
+}
+function respawn(){ if(AI_DRIVE||race.state==='menu'||race.state==='loading'||race.state==='cutscene'||car.wreckT>0) return; placeCar(respawnIndex()); }
+function fmt(t){ const m=Math.floor(t/60), s=t-m*60; return m+':'+(s<10?'0':'')+s.toFixed(2); }
+
+function passGate(k){
+  const lt=race.t-race.lapStart;
+  if(k<NG){
+    race.next=k+1;
+    setPop('CHECKPOINT '+(k+1)+'/'+(NG+1)+(HIDE_CHECKPOINT_TIME?'':'\n'+fmt(lt)), false);   // HIDE_CHECKPOINT_TIME: the name alone, without the lap time
+    car.events.push({t:'cp'});
+    return;
+  }
+  // finish line with every checkpoint passed: lap complete
+  if(race.best===null||lt<race.best) race.best=lt;
+  race.lapStart=race.t; race.next=0;
+  if(race.lap>=TOTAL_LAPS){ race.state='finished'; race.finishT=race.t; race.place=1+AIS.filter(a=>a.fin).length; car.events.push({t:'finish'}); }
+  else {
+    setPop('LAP '+race.lap+' COMPLETE\n'+fmt(lt), false);
+    race.lap++; car.events.push({t:'lap',final:race.lap===TOTAL_LAPS});
+    if(car.damage>0.05){ car.damage=Math.max(0,car.damage-PIT_REPAIR); car.events.push({t:'pit'}); }
+  }
+}
+function checkGates(){
+  for(let k=0;k<GATES.length;k++){
+    const g=GATES[k], dx=car.x-g.x, dz=car.z-g.z, a=dx*g.tx+dz*g.tz, lat=dx*g.tz-dz*g.tx;
+    const crossed=g.prevA<0 && a>=0 && g.prevA>-15 && Math.abs(lat)<HALFW+7 && Math.abs(car.y-g.y)<30;
+    g.prevA=a;
+    if(!crossed) continue;
+    if(k===race.next) passGate(k);
+    else if(k===NG ? race.next>0 : k>race.next){   // (crossing the start line at the very start, with nothing passed yet, is fine)
+      if(race.missCool<=0){ setPop('MISSED CHECKPOINT '+(race.next+1)+'!',true); race.missCool=3; car.events.push({t:'missed'}); }
+    }
+  }
+}
+
+function updateRace(dt){
+  race.popT=Math.max(0,race.popT-dt); race.missCool=Math.max(0,race.missCool-dt);
+  if(race.state==='countdown'){ race.countdown-=dt;
+    if(!race.goSaid&&race.countdown<=0.2){ race.goSaid=true; car.events.push({t:'go'}); }                   // the moment updateHud puts up the start word
+    if(race.countdown<=0){ race.state='race'; race.t=0; for(const g of GATES) g.prevA=(car.x-g.x)*g.tx+(car.z-g.z)*g.tz; } return; }
+  if(race.state!=='race') return;
+  race.t+=dt; race.goFlash=Math.max(0,race.goFlash-dt);
+  tutStep(dt);
+  if(DIFF.explore) return;                                              // exploration: the gates are scenery, and any direction is fine
+  checkGates();
+  // wrong way: driving against the road direction for a while
+  const t=track[car.idx], spd=Math.hypot(car.vx,car.vz), along=car.vx*t.tx+car.vz*t.tz;
+  race.backT=(car.grounded&&spd>8&&along<-0.5*spd)?race.backT+dt:Math.max(0,race.backT-dt*2);
+  race.wrongWay=race.backT>1.2;
+}
+
+
+// ---------- AI opponents ----------
+// Five computer racers. They use the same car physics as the player (jumps, ice, water, bumping ...) and are driven by a simple
+// controller: chase a point on the road ahead, ease off for corners, rubber-band towards the player, use nitro on straights and
+// (on the harder levels) go for the player. How good they are is set by the DIFFICULTIES table in config.js (DIFF = the chosen one), with the level's LEVEL_AI_MULTIPLIERS on top (AID = what they use);
+// `ag` is how much of the difficulty's aggression this particular driver has, `rx` its factor on the difficulty's reaction delay (aiSees).
+const AI_DEFS=[
+  {css:'#2f61e0',skill:.97,lane:-7,ph:0.0,ag:.9,rx:.95},
+  {css:'#f2c81a',skill:.93,lane: 7,ph:1.3,ag:.6,rx:1.1},
+  {css:'#33b040',skill:.99,lane: 0,ph:2.1,ag:1.0,rx:.9},
+  {css:'#a040c8',skill:.90,lane:-4,ph:3.3,ag:.5,rx:1.15},
+  {css:'#f28018',skill:.95,lane: 5,ph:4.5,ag:.8,rx:1.0}];
+const AI_PLAYER_DEF={skill:.95,lane:0,ph:0,ag:0};                          // ?ai: the player's car: the field's average skill, on the road's centre lane
+const AIS=[];
+function makeRacer(){ return {x:0,y:0,z:0,vx:0,vy:0,vz:0,yaw:0,ux:0,uy:1,uz:0,nx:0,ny:1,nz:0,steer:0,spin:0,grounded:true,nitro:1,nitroWait:0,nitroLock:false,onTrack:true,idx:0,shake:0,
+  damage:0,inv:0,wreckT:0,airT:0,inWater:false,inLava:false,nitroOn:false,ice:false,events:[]}; }
+function placeRacer(c,idx,lat){
+  const t=track[(idx+M)%M]; if(!lat) lat=freeLat((idx+M)%M,0);             // (back on the road after a wreck: beside anything lying there)
+  c.x=t.x+t.tz*lat; c.z=t.z-t.tx*lat; c.yaw=Math.atan2(t.tx,t.tz);
+  const dk=bridgeDeckAt(c.x,c.z); c.y=dk!==null?dk:hAt(c.x,c.z);
+  c.vx=c.vy=c.vz=0; c.ux=0;c.uy=1;c.uz=0; c.nx=0;c.ny=1;c.nz=0; c.grounded=true; c.steer=0; c.idx=(idx+M)%M; c.events.length=0;
+}
+// starting grid behind the line (the player sits at row 1, middle); base = the track index of the player's row + 14
+function spawnAI(base){
+  AIS.length=0;
+  if(DIFF.explore||!OPPONENTS) return;
+  const slots=[[-14,8],[-14,-8],[-20,8],[-20,-8],[-26,0]];
+  AI_DEFS.forEach((d,k)=>{
+    const c=makeRacer(); c.def=d; placeRacer(c,base+slots[k][0],slots[k][1]);
+    const s=track[c.idx].s; c.laps=s>0.5?-1:0; c.lastS=s; c.prog=c.laps+s; c.fin=false; c.finT=0; c.stuck=0; c.off=0; c.resp=0;
+    c.offMul=AID.offRoad; c.gripMul=AID.roadHold; c.vmul=1; c.nitroGo=false;   // (see stepCar)
+    AIS.push(c); });
+}
+// how far round the race the player is (laps + fraction), measured through the validated checkpoints so shortcuts don't count
+function playerProg(){
+  if(race.state==='finished') return TOTAL_LAPS;
+  const s=track[car.idx].s; let sp;
+  if(race.next===0) sp=s>0.5?s-1:Math.min(s,GATES[0].s);
+  else { const b=GATES[race.next-1].s, a=race.next<NG?GATES[race.next].s:1; sp=clamp(s,b,a); }
+  return (race.lap-1)+sp;
+}
+function rank(){ const pp=playerProg(); let r=1; for(const a of AIS) if(a.prog>pp) r++; return r; }
+
+// bend speed profile of the road: the fastest speed that still takes each bend (from the car's turn rate, which falls with speed:
+// radius = v(1+v/40)/2.1), then a backwards pass so that the car starts braking early enough. kc scales it (1 = about the limit of a car staying on the road)
+function cornerProfile(kc){
+  const spm=TL/M, vc=new Float32Array(M), v=new Float32Array(M);
+  for(let i=0;i<M;i++){ const a=track[(i-3+M)%M], b=track[(i+3)%M], dth=Math.abs(angDiff(Math.atan2(b.tx,b.tz),Math.atan2(a.tx,a.tz))), R=6*spm/Math.max(dth,1e-4);
+    vc[i]=Math.min(90,kc*20*(Math.sqrt(1+4*2.1*R/40)-1)); v[i]=vc[i]; }
+  for(let pass=0;pass<3;pass++) for(let i=M*2-1;i>=0;i--){ const a=i%M, b=(i+1)%M; v[a]=Math.min(v[a],Math.sqrt(v[b]*v[b]+2*30*spm)); }
+  return v;
+}
+let cpLV=null, cpTL=0, cpArr=null;
+function cornerSpeeds(){ if(cpLV!==LV||cpTL!==TL){ cpLV=LV; cpTL=TL; cpArr=cornerProfile(1); } return cpArr; }
+// is the road ahead of racer c clear enough for a nitro burst? Straight for the next ~1.6 s of driving, no jump, no parked vehicle on it
+function clearRun(c,sp){
+  const spm=TL/M, n=Math.max(10,Math.round(sp*1.6/spm)), t0=track[c.idx], h0=Math.atan2(t0.tx,t0.tz);
+  for(const k of [n>>1,n]) { const t=track[(c.idx+k)%M]; if(Math.abs(angDiff(Math.atan2(t.tx,t.tz),h0))>0.2) return false; }
+  const s0=t0.s;
+  for(const j of JUMPS){ const a=wrapS(j[0]-s0)*TL; if(a>-15&&a<n*spm+40) return false; }
+  if(LV.obstacles) for(const o of LV.obstacles){ const a=(((o[0]-c.idx)%M)+M)%M; if(a<n+20) return false; }
+  return true;
+}
+// one AI driver's decisions for this step: fills in ctl, and takes the damage for being stuck or lost. pp = the player's progress, plat = its offset from the road centre
+// reaction delay (the difficulty's `reaction`, seconds, times the driver's own `rx`): the driver sees the world as it was that long ago, as a human does.
+// That covers its own car (where it is, where it points, how fast it goes, on the ground or not) and the player (progress and lane).
+// Like a human it also knows what its own hands and feet have done since then (an efference copy), so a forward model carries the car it saw forward
+// through its own commands: driving that goes as expected is met in time, and only the unexpected (a bump or a spin, a slide, a landing, a wall,
+// the player swerving) is met late. The road ahead does not move, so the bend speeds are read where the model puts the car (`ia`).
+// (A plain delay with no forward model is not human: it pumps the brake, since every application would last the whole delay.)
+// 0 or no `reaction`: the driver sees the present (the original AI)
+const aiTurn=sp=>2.1/(1+sp/40)*Math.min(1,sp/7);   // the turn rate at full lock (as in stepCar)
+// the acceleration a driver expects from its command S (throttle, brake, nitro) at speed sp: engine, brake, coasting, road drag
+function aiAcc(S,sp,vm){ return (S.brk?(sp>1.5?-BRAKE:0):S.thr?ACC*vm*(1-sp/(MAXV*vm*(S.nit?1.4:1)))+(S.nit?34:0):-7)-sp*(LV.phys.dragRoad||0); }
+function aiSees(c,D,pp,plat){
+  const n=Math.round((D.reaction||0)*60*(c.def.rx||1)), q0=c.rq;
+  const now={x:c.x,z:c.z,yaw:c.yaw,vx:c.vx,vz:c.vz,sp:Math.hypot(c.vx,c.vz),idx:c.idx,ia:c.idx,prog:c.prog,grounded:c.grounded,onTrack:c.onTrack,ice:c.ice,inWater:c.inWater,pp,plat,
+    st:c.steer,thr:0,brk:0,nit:false,res:0};
+  if(n<=0) return now;
+  const q=q0&&q0.n===n?q0:(c.rq={n,buf:new Array(n+1),w:0,len:0}), last=q.len?q.buf[q.w]:null;   // (a ring of the last n+1 steps; aiDrive adds each step's commands)
+  if(c.wreckT>0||(last&&Math.hypot(now.x-last.x,now.z-last.z)>15)) q.len=0;   // wrecked or put back on the road: what it saw before no longer applies
+  else if(last&&last.grounded&&now.grounded) now.res=lerp(last.res,(now.sp-last.sp)*60-aiAcc(last,last.sp,c.vmul||1),.1);   // the felt difference between what the car did and what the driver expected (sand, a climb): expected to go on
+  q.w=(q.w+1)%(n+1); q.buf[q.w]=now; q.len=Math.min(q.len+1,n+1);
+  const k=q.len-1, at=j=>q.buf[(q.w-k+j+n+1)%(n+1)], o=at(0);   // o: what it sees, k steps old
+  if(k<=0) return o;
+  const dt=1/60, vm=c.vmul||1;
+  let sp=o.sp, h=Math.atan2(o.vx,o.vz), yaw=o.yaw, x=o.x, z=o.z;
+  for(let j=0;j<k;j++){ const S=at(j);
+    if(o.grounded){ const dy=-at(j+1).st*aiTurn(sp)*dt; yaw+=dy; h+=dy; sp=Math.max(0,sp+(aiAcc(S,sp,vm)+o.res)*dt); }   // (the wheel's position after step j is in the next record)
+    x+=Math.sin(h)*sp*dt; z+=Math.cos(h)*sp*dt;
+  }
+  const t=track[o.idx], ds=((x-o.x)*t.tx+(z-o.z)*t.tz)/(TL/M), ia=((o.idx+Math.round(ds))%M+M)%M;
+  return {x,z,yaw,vx:Math.sin(h)*sp,vz:Math.cos(h)*sp,sp,idx:ia,ia,prog:o.prog+ds/M,grounded:o.grounded,onTrack:o.onTrack,ice:o.ice,inWater:o.inWater,pp:o.pp,plat:o.plat};
+}
+function aiDrive(c,ctl,dt,D,pp,plat){
+  const P=aiSees(c,D,pp,plat), sp=P.sp, d0=c.def;     // (P: what the driver sees; the car's real state is c)
+  // rubber band: metres of road the player is ahead of this car (negative: the car is ahead). Behind: speed up, far ahead: ease off
+  const gap=c===car?0:(P.pp-P.prog)*TL;                                  // (?ai: the player's car has nobody to rubber-band to)
+  const rb=gap>0?D.behindBoost*Math.min(1,gap/D.behindRange):-D.aheadSlow*Math.min(1,-gap/D.aheadRange);
+  const cruise=50*d0.skill*D.speed*(1+rb);
+  c.vmul=D.speed*(1+Math.max(rb,0));                                // the car itself gets faster (engine power and top speed), not just its throttle target: a flat-out car tops out at about 47 m/s
+  // nitro: a burst on a clear straight, starting with a full enough tank and going on until the tank is down to nitroKeep
+  const noBoost=PREVENT_FINAL_BOOST&&TOTAL_LAPS>1&&c.prog>=TOTAL_LAPS-1+GATES[5].s;   // (final lap, past checkpoint 6)
+  c.nitroGo=P.grounded&&P.onTrack&&!P.ice&&!P.inWater&&(c.nitroOn?c.nitro>D.nitroKeep:c.nitro>=D.nitroStart&&!noBoost)&&clearRun({idx:P.ia},sp);
+  ctl.nitro=c.nitroGo;
+  const vmax=cruise*(c.nitroGo?1.4:1);
+  let look=Math.round((12+sp*0.1)*(D.lookMul??1)), t=track[(P.idx+look)%M];   // (lookMul, laneMul: per-level only, LEVEL_AI_MULTIPLIERS in config.js; 1 when absent)
+  const lw=Math.min(1,HALFW/15);                                    // (narrow roads: the lanes shrink with them)
+  let lane=clamp(d0.lane+4*Math.sin(race.t*0.35+d0.ph),-9,9)*lw*(D.laneMul??1);
+  // aggression: just ahead of the player = move into its lane to block it; alongside or just behind = move over to bump it
+  const A=c===car?0:D.aggression*d0.ag;
+  if(A>0){ const w=A*(gap>0?1-smooth(8,34,gap):1-smooth(6,24,-gap)); if(w>0) lane=lerp(lane,clamp(P.plat,-(HALFW-3),HALFW-3),w*0.9); }
+  const cut=D.cutCorners?cutLine(D.cutCorners):null;                // cutCorners: the planned line (aicuts.js); the lanes close up where it leaves the middle of the road
+  if(cut){ look+=Math.round(CUT_TUNE.look*cut.room[P.idx]); t=track[(P.idx+look)%M]; const q=cut.lat[(P.idx+look)%M]; lane=lane*(1-.8*Math.min(1,Math.abs(q)/5))+q; }
+  const oa=obstacleAhead(P.idx,look,lane); if(oa!==null){ look=Math.max(6,oa); t=track[(P.idx+look)%M]; }   // aim beside the obstacle itself, not past it
+  lane=steerRound(P.idx,look,lane);                                 // steer round whatever is left on the road (LV.obstacles)
+  const tx=t.x+t.tz*lane, tz=t.z-t.tx*lane, dd=angDiff(Math.atan2(tx-P.x,tz-P.z),P.yaw);
+  ctl.steer=clamp(-dd*2.5,-1,1);
+  const fly=lowgCaps(), vf=fly?fly[(P.ia+2)%M]:1e9;                 // low gravity (ailowg.js): the fastest take-off that still lands on the road
+  if(D.cornering>0){                                                // skilled drivers brake ahead of a bend, to the speed the bend allows
+    const vb=Math.min((cut?cut.v:cornerSpeeds())[(P.ia+2)%M]*D.cornering,vf);
+    ctl.thr=sp<Math.min(vmax,vb*1.02)?1:0; ctl.brk=(sp>vb*(1.06+0.1*A)||sp>vmax*1.1)?1:0;
+  } else {                                                          // the original: brake when the car points well away from the road ahead
+    ctl.thr=sp<Math.min(vmax,vf*1.02)?1:0;
+    ctl.brk=((sp>38&&Math.abs(dd)>0.35)||sp>vmax*1.1||sp>vf*1.06)?1:0;
+  }
+  // lost or stuck: the car takes damage until it blows up, and is then put back on the road (see afterWreck)
+  c.stuck=Math.hypot(c.vx,c.vz)<3?c.stuck+dt:0; c.off=c.onTrack?0:c.off+dt;
+  if(c.rq&&c.rq.len){ const S=c.rq.buf[c.rq.w]; S.thr=ctl.thr; S.brk=ctl.brk; S.nit=c.nitroGo; }   // (what the driver did this step, for aiSees' forward model)
+  if(c.stuck>D.recovery*0.4) hurt(c,AI_STUCK_DAMAGE*dt,1);
+  else if(c.dunk||c.trackD>HALFW+AI_OFFTRACK_DIST||c.off>D.recovery*2) hurt(c,AI_OFFTRACK_DAMAGE*dt,1);   // (in the river under an open bridge: as if far off the road)
+}
+// ?ai: the player's car, driven by the same code as an opponent (exploration has no opponent settings, so it borrows easy's)
+function playerAI(){
+  const ctl={thr:0,brk:0,steer:0,hb:false,nitro:false}, D=AID||DIFFICULTIES.easy;
+  if(race.t>=D.startDelay){ car.prog=playerProg(); aiDrive(car,ctl,1/60,D,car.prog,0); }
+  return ctl;
+}
+function stepAI(dt){
+  hazStep(dt);
+  const racing=race.state==='race' || race.state==='finished', pp=playerProg(), D=AID||DIFF;
+  const tp=track[car.idx], plat=(car.x-tp.x)*tp.tz-(car.z-tp.z)*tp.tx;      // the player's offset from the road centre (same sign as the lanes)
+  for(const c of AIS){
+    const ctl={thr:0,brk:0,steer:0,hb:false,nitro:false};
+    if(racing&&!c.fin&&race.t>=D.startDelay){
+      aiDrive(c,ctl,dt,D,pp,plat);
+    } else if(c.fin){                                                                    // finished: coast towards the road edge and stop there (still solid, but out of the way)
+      const t=track[(c.idx+12)%M], lane=(c.def.lane<0?-1:1)*(HALFW-3.5);
+      const tx=t.x+t.tz*lane, tz=t.z-t.tx*lane;
+      ctl.steer=clamp(-angDiff(Math.atan2(tx-c.x,tz-c.z),c.yaw)*2.5,-1,1); ctl.brk=1; ctl.halt=true; }
+    stepCar(dt,ctl,c);
+    for(const e of c.events) if(e.t==='wreck'){ explode(c); if(Math.hypot(c.x-car.x,c.z-car.z)<150) sfx('boom'); } else if(e.t==='firehit'&&c.wreckT<=0&&Math.hypot(c.x-car.x,c.z-car.z)<150) explode(c,.22);
+    c.events.length=0;
+    const s=track[c.idx].s;
+    if(c.lastS>0.8&&s<0.2){ c.laps++; c.damage=Math.max(0,c.damage-PIT_REPAIR); } else if(c.lastS<0.2&&s>0.8) c.laps--;
+    c.lastS=s; c.prog=c.laps+s;
+    if(!c.fin&&c.prog>=TOTAL_LAPS){ c.fin=true; c.finT=race.t; }
+  }
+  racerCollide();
+}
+// cars are solid to each other (until they have finished): push apart and swap some momentum
+function racerCollide(){
+  const all=[car,...AIS], R=3.1;
+  for(let i=0;i<all.length;i++) for(let j=i+1;j<all.length;j++){
+    const a=all[i], b=all[j];
+    if(a.wreckT>0||b.wreckT>0||Math.abs(a.y-b.y)>2.5) continue;       // (finished cars stay solid: they are just indestructible)
+    const dx=b.x-a.x, dz=b.z-a.z, d2=dx*dx+dz*dz; if(d2>=R*R) continue;
+    const d=Math.sqrt(d2)||0.01, nx=dx/d, nz=dz/d, pen=(R-d)/2;
+    a.x-=nx*pen; a.z-=nz*pen; b.x+=nx*pen; b.z+=nz*pen;
+    const rv=(b.vx-a.vx)*nx+(b.vz-a.vz)*nz;
+    if(rv<0){ const jn=-(1+0.4)*rv/2; a.vx-=jn*nx; a.vz-=jn*nz; b.vx+=jn*nx; b.vz+=jn*nz;
+      if(-rv>CAR_HIT_MIN_SPEED){
+        const dmg=clamp((-rv-CAR_HIT_MIN_SPEED)*CAR_HIT_DAMAGE_PER_SPEED,0,CAR_HIT_MAX), withPlayer=a===car||b===car, human=isHuman(a)||isHuman(b);
+        for(const v of [a,b]) hurt(v,dmg,isHuman(v)?CAR_HIT_PLAYER_FACTOR*DIFF.damage:human?CAR_HIT_OPPONENT_FACTOR:CAR_HIT_OPPONENT_OPPONENT_FACTOR);
+        if(withPlayer){ car.shake=Math.max(car.shake,Math.min(0.6,-rv/40)); car.events.push({t:'hit',v:-rv}); } } }
+  }
+}
+
+
+// ---------- camera ----------
+const cam={yaw:0,pos:[0,0,0],fov:1.1,target:null};                     // target: a point to look at instead of the car (cutscenes; debug ?look=x,y,z)
+const LOOK=(/[?&]look=(-?[\d.]+),(-?[\d.]+),(-?[\d.]+)/.exec(location.search)||[]).slice(1).map(Number);
+const CAMSIDE=+((/[?&]cam=(-?[\d.]+)/.exec(location.search)||[])[1]||0);
+const CHASE=(/[?&]chase=(-?[\d.]+),(-?[\d.]+)/.exec(location.search)||[]).slice(1).map(Number);   // debug: ?chase=<distance behind>,<height above> the car
+function updateCamera(dt,spd){
+  cam.yaw+=angDiff(car.yaw,cam.yaw)*(1-Math.exp(-4.5*dt));
+  const dist=CHASE.length?CHASE[0]:11+spd*0.03, fx=Math.sin(cam.yaw), fz=Math.cos(cam.yaw);
+  const camFloor=(x,z)=>{ const d=LV.deckAt?LV.deckAt(x,z):null; return d!==null?Math.max(d,hAt(x,z)):hAt(x,z); };   // (the camera stays above a level's raised deck)
+  let cx=car.x-fx*dist, cz=car.z-fz*dist, cy=CHASE.length?car.y+CHASE[1]:Math.max(car.y+5.2, camFloor(cx,cz)+2.5);
+  const sh=car.shake*0.5; cx+=(Math.random()-.5)*sh; cy+=(Math.random()-.5)*sh;
+  cam.pos=[cx,cy,cz];
+  if(rects.length) for(let t=1;t>0.2;t-=0.12){                          // pull the camera in until it is outside every building
+    const px=car.x+(cx-car.x)*t, pz=car.z+(cz-car.z)*t; let inside=false;
+    for(const r of rects) if(Math.abs(px-r[0])<r[2]+1.5&&Math.abs(pz-r[1])<r[3]+1.5){ inside=true; break; }
+    if(!inside){ cam.pos=[px,Math.max(car.y+2+(cy-car.y-2)*t,camFloor(px,pz)+2.5),pz]; break; }
+  }
+  if(CAMSIDE){ const l=[Math.cos(car.yaw),0,-Math.sin(car.yaw)]; cam.pos=[car.x+l[0]*CAMSIDE,car.y+Math.abs(CAMSIDE)*0.45,car.z+l[2]*CAMSIDE]; cam.yaw=car.yaw-Math.PI/2*Math.sign(CAMSIDE); }  // debug: ?cam=<side distance>
+  cam.fov=lerp(cam.fov,1.0+Math.min(spd,80)*0.004+(0),1-Math.exp(-3*dt));
+  if(LOOK.length) cam.target=LOOK;
+}
+
+
+function handleEvents(){
+  for(const e of car.events){
+    if(e.t==='land'){ const n=Math.min(26,(e.v*0.8)|0);
+      for(let i=0;i<n;i++){ const a=rr(0,6.283), sp=rr(2,7);
+        dust(car.x+Math.cos(a)*1.2,car.y+0.2,car.z+Math.sin(a)*1.2,Math.cos(a)*sp,rr(0.8,2.2),Math.sin(a)*sp,car.onTrack,true); }
+      if(e.v>20) sfx('thud');
+    } else if(e.t==='hit'){
+      for(let i=0;i<8;i++) emit(car.x,car.y+0.8,car.z,rr(-8,8),rr(2,8),rr(-8,8),0.4,0.12,[1,.9,.4],{grav:30,a:1});
+      sfx('crash');
+    } else if(e.t==='splash'){
+      for(let i=0;i<16;i++){ const a=rr(0,6.283), sp=rr(2,8);
+        emit(car.x,car.y+0.3,car.z,Math.cos(a)*sp,rr(4,10),Math.sin(a)*sp,0.8,0.25,THEME.spray||[.82,.92,1],{grav:26,a:0.85}); }
+      sfx('splash');
+    } else if(e.t==='firehit'){
+      if(car.wreckT<=0){ explode(car,.22); sfx('crash'); car.shake=Math.max(car.shake,.5); }
+      setPop(e.shock?'SHOCK DAMAGE!':e.lava?'LAVA DAMAGE!':'FIRE DAMAGE!',true); race.popT=1.4;
+    } else if(e.t==='zap'){
+      for(let i=0;i<5;i++) emit(car.x,car.y+0.9,car.z,rr(-9,9),rr(2,9),rr(-9,9),0.35,0.13,[1,.55,.45],{grav:26,a:1,hot:true});
+      car.shake=Math.max(car.shake,.5); beep(190,0.18,'sawtooth');
+    } else if(e.t==='wreck'){ explode(); sfx('boom'); car.shake=1; }
+    else if(e.t==='go'){ if(/\.wav$/i.test(LV.go||'')) vuvuzela(); }                                         // a start word that names a .wav is also heard
+    else if(e.t==='cp') beep(880,0.1)
+    else if(e.t==='missed') beep(140,0.35,'sawtooth')
+    else if(e.t==='lap'){ beep(660,0.1); beep(990,0.16,'square',0.12); }
+    else if(e.t==='finish'){ beep(660,0.1); beep(880,0.1,'square',0.12); beep(1320,0.3,'square',0.24); race.earned=AI_DRIVE||!OPPONENTS||curLevel!==LEVEL_ORDER[sel]?null:recordFinish(LEVEL_ORDER[sel],race.place); race.resT=RESULTS_DELAY; }
+  }
+  car.events.length=0;
+}
+
+
+// ---------- main loop ----------
+let last=performance.now(), acc=0;
+const HOLD=/[?&]hold/.test(location.search);
+function frame(now){
+  const dt=Math.min(0.1,(now-last)/1000); last=now;
+  pollPad(dt);
+  if(race.state==='menu'||race.state==='loading'){ if(gainN) gainN.gain.value=0; requestAnimationFrame(frame); return; }   // no engine sound outside a race
+  if(paused){ if(gainN) gainN.gain.value=0; csHum(false); acc=0; render(); requestAnimationFrame(frame); return; }   // pause menu: the world stands still
+  if(race.state==='cutscene'){ csFrame(dt); requestAnimationFrame(frame); return; }                  // a cutscene plays its script instead of the race (js/cutscene.js)
+  acc+=dt;
+  const STEP=1/60; let ctl=inp();
+  if(race.state!=='race'){ ctl={thr:0,brk:0,steer:0,hb:false,nitro:false}; if(race.state==='finished'){ ctl.brk=1; ctl.halt=true; } }
+  if(HOLD) acc=0;                                                       // debug: ?hold freezes the simulation (for screenshots)
+  while(acc>=STEP){ if(AI_DRIVE&&race.state==='race') ctl=playerAI(); stepCar(STEP,ctl); stepAI(STEP); updateRace(STEP); carFx(STEP); for(const a of AIS) aiFx(a,STEP); acc-=STEP; }
+  handleEvents(); if(!HOLD) updateParts(dt);
+  if(race.resT>0&&(race.resT-=dt)<=0&&!HOLD) openResults();
+  const spd=Math.hypot(car.vx,car.vz);
+  updateCamera(dt,spd); render(); updateHud(spd);
+  if(AC&&osc){ osc.frequency.value=38+spd*2.4+(ctl.thr?10:0); gainN.gain.value=muted?0:0.05+(ctl.thr?0.04:0); }
+  requestAnimationFrame(frame);
+}
+// debug: ?warm=<seconds> lets a simple pure-pursuit bot drive the player (with the opponents) before the first frame, for screenshots of racing traffic, light trails ...
+function warm(sec){
+  race.state='race'; race.t=0;
+  for(let n=0;n<sec*60;n++){
+    const sp=Math.hypot(car.vx,car.vz), look=12+Math.round(sp*0.1), t=track[(car.idx+look)%M], ln=steerRound(car.idx,look,0), dd=angDiff(Math.atan2(t.x+t.tz*ln-car.x,t.z-t.tx*ln-car.z),car.yaw);
+    stepCar(1/60,{thr:sp<48?1:0,brk:(sp>38&&Math.abs(dd)>0.35)?1:0,steer:clamp(-dd*2.5,-1,1),hb:false,nitro:false}); stepAI(1/60); updateRace(1/60); carFx(1/60); updateParts(1/60);
+    car.events.length=0; for(const a of AIS) a.events.length=0; }
+}
+// debug: ?bench=<max seconds> runs a whole race headlessly (a pure-pursuit bot drives the player: ?pace=<target speed, default 52>,
+// ?bnitro uses nitro on straights) and writes a summary into #bench, for balancing the difficulty settings
+// debug: ?ftest checks the rules after the finish: a finished car stays solid (it is bumped and bumps others) but takes no damage
+function finishTest(){
+  race.state='finished'; const R={};
+  placeCar(300); car.vx=car.vy=car.vz=0; car.damage=0; car.inv=0;
+  const A=AIS[0], B=AIS[1], C=AIS[2];
+  placeRacer(A,290,0); A.fin=false; A.damage=0; A.inv=0; const t=track[290]; A.vx=t.tx*40; A.vz=t.tz*40;        // A: still racing, rams the finished player from behind
+  placeRacer(B,340,6); B.fin=true; B.damage=0; B.inv=0;                                                         // B: finished, stationary
+  placeRacer(C,330,6); C.fin=false; C.damage=0; C.inv=0; const t2=track[330]; C.vx=t2.tx*40; C.vz=t2.tz*40;    // C: still racing, rams finished B
+  for(const o of AIS.slice(3)){ o.wreckT=0; placeRacer(o,600,0); }
+  const p0={x:car.x,z:car.z}; let hits=0;
+  for(let n=0;n<180;n++){ stepCar(1/60,{thr:0,brk:1,steer:0,hb:false,nitro:false,halt:true}); stepAI(1/60); hits+=car.events.filter(e=>e.t==='hit').length; car.events.length=0; }
+  Object.assign(R,{playerMoved:+Math.hypot(car.x-p0.x,car.z-p0.z).toFixed(2),playerDamage:+car.damage.toFixed(3),hitsOnPlayer:hits,A_damage:+A.damage.toFixed(3),A_speed:+Math.hypot(A.vx,A.vz).toFixed(1),
+    B_damage:+B.damage.toFixed(3),C_damage:+C.damage.toFixed(3)});
+  const el=document.createElement('pre'); el.id='bench'; el.textContent='BENCH '+JSON.stringify(R); document.body.appendChild(el);
+}
+function bench(maxSec){
+  const h0=hurt, dealt={p:0,a:0}, wrecks={p:0}; hurt=function(c,a,k){ const b=c.damage; h0(c,a,k); dealt[c===car?'p':'a']+=c.damage-b; };
+  const expert=/[?&]expert/.test(location.search), prof=expert?cornerProfile(+((/[?&]kc=([\d.]+)/.exec(location.search)||[])[1]||1.15)):null;
+  const pace=+((/[?&]pace=([\d.]+)/.exec(location.search)||[])[1]||52), useNitro=/[?&]bnitro/.test(location.search);
+  race.state='race'; race.t=0; const lapT=[], resp0=AIS.map(a=>a.resp); let lastLap=1, offT=0, aiOff=0, maxLead=-1e9, maxBehind=1e9, nitroT=0, aiNitroT=0, aiSp=0, aiSpN=0;
+  for(let n=0;n<maxSec*60&&race.state!=='finished';n++){
+    const sp=Math.hypot(car.vx,car.vz), look=12+Math.round(sp*0.1), t=track[(car.idx+look)%M], ln=steerRound(car.idx,look,0), dd=angDiff(Math.atan2(t.x+t.tz*ln-car.x,t.z-t.tx*ln-car.z),car.yaw);   // (round what lies on the road, as the AI does)
+    if(expert){ const vt=prof[(car.idx+3)%M], go=car.grounded&&car.onTrack&&car.nitro>0.3&&clearRun(car,sp);
+      stepCar(1/60,{thr:sp<vt*1.02||sp<20?1:0,brk:sp>vt*1.08?1:0,steer:clamp(-dd*2.5,-1,1),hb:false,nitro:go}); }
+    else stepCar(1/60,{thr:sp<pace?1:0,brk:(sp>38&&Math.abs(dd)>0.35)?1:0,steer:clamp(-dd*2.5,-1,1),hb:false,nitro:useNitro&&car.grounded&&Math.abs(dd)<0.05&&car.nitro>0.5});
+    stepAI(1/60); updateRace(1/60); for(const e of car.events) if(e.t==='wreck') wrecks.p++; car.events.length=0; for(const a of AIS) a.events.length=0;
+    if(race.lap!==lastLap){ lapT.push(+race.t.toFixed(1)); lastLap=race.lap; }
+    if(!car.onTrack) offT+=1/60; if(car.nitroOn) nitroT+=1/60;
+    for(const a of AIS){ if(a.nitroOn) aiNitroT+=1/60; if(!a.onTrack) aiOff+=1/60; if(!a.fin){ aiSp+=Math.hypot(a.vx,a.vz); aiSpN++; } }
+    const lead=Math.max(...AIS.map(a=>a.prog-playerProg()))*TL; maxLead=Math.max(maxLead,lead); maxBehind=Math.min(maxBehind,lead);
+  }
+  const fin=race.state==='finished';
+  const r={level:LV.name,diff:difficulty,TL:Math.round(TL),pace:expert?'expert':pace,bnitro:useNitro||expert,finished:fin,place:fin?race.place:rank(),time:+(fin?race.finishT:race.t).toFixed(1),lapT,
+    dmg:+car.damage.toFixed(2),offT:+offT.toFixed(1),nitroT:+nitroT.toFixed(1),aiNitroT:+(aiNitroT/AIS.length).toFixed(1),aiOffT:+(aiOff/AIS.length).toFixed(1),aiAvgSp:+(aiSp/Math.max(1,aiSpN)).toFixed(1),
+    aiResets:AIS.map((a,i)=>a.resp-resp0[i]),dealtToPlayer:+dealt.p.toFixed(2),dealtToAI:+(dealt.a/AIS.length).toFixed(2),playerWrecks:wrecks.p,aiFin:AIS.map(a=>a.fin?+a.finT.toFixed(1):null),aiAheadMax:Math.round(maxLead),aiBehindMax:Math.round(-maxBehind)};
+  const el=document.createElement('pre'); el.id='bench'; el.textContent='BENCH '+JSON.stringify(r); document.body.appendChild(el); console.log('BENCH '+JSON.stringify(r));
+}
+buildMenu();
+const startId=LEVELS[LEVEL_PARAM]?LEVEL_PARAM:'dirt';
+const csParam=/[?&]cutscene=(\w+)(?:,([\d.]+))?/.exec(location.search);   // debug: ?cutscene=ending[,seconds] (csDebugStart, js/cutscene.js)
+const csId=csParam?csParam[1]:LEVEL_PARAM;                                  // ?level=<a cutscene level> (ending) plays its cutscene too, from the start
+if(LEVELS[csId]&&LEVELS[csId].cutscene) csDebugStart(csId,csParam?+(csParam[2]||0):0);
+else if(AUTO||AI_DRIVE||LEVEL_PARAM){ sel=Math.max(0,LEVEL_ORDER.indexOf(startId)); refreshMenu(); loadLevel(startId); startRace(); setMode('play'); const wm=/[?&]warm=([\d.]+)/.exec(location.search); if(wm) warm(+wm[1]); const bm=/[?&]bench=([\d.]+)/.exec(location.search); if(bm) bench(+bm[1]); if(/[?&]ftest/.test(location.search)&&AIS.length) finishTest(); }      // a level loaded but left out of LEVEL_TABLE (monsoon): sel stays on track 1 and a finish records nothing
+else setMode('loading');
+// the saved game arrives a moment later (IndexedDB has no synchronous read): the debug starts above do not wait for it, the menus do
+loadSave().then(()=>{
+  for(const a in binds){ const b=SAVE.binds&&SAVE.binds[a]; if(Array.isArray(b)&&b.length===BIND_SLOTS) binds[a]=b.slice(); }
+  if(!DIFF_PARAM&&DIFFICULTIES[SAVE.difficulty]){ difficulty=SAVE.difficulty; DIFF=DIFFICULTIES[difficulty]; }
+  applyMouseRace(); refreshHints(); settingsBase=settingsKey();
+  if(!AUTO&&!AI_DRIVE&&!LEVEL_PARAM&&!csParam){ if(USE_MAIN_PAGE) goIntro(); else showMenu(); }
+});
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

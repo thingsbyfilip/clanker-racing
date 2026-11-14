@@ -1,0 +1,20 @@
+# Output of the AI test harness
+ai_test_script/out/
+
+# Screenshots from the headless smoke test (the screenshots/ folder is kept)
+/*.png
+
+# Backup copies kept before large edits
+*.bak
+*~
+
+# Node, if the test harness ever gets dependencies
+node_modules/
+
+# Editors and operating systems
+.vscode/
+.idea/
+.claude/
+Thumbs.db
+desktop.ini
+.DS_Store
