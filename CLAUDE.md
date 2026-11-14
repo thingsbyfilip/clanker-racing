@@ -34,6 +34,7 @@ Debug URL params:
 - `?cutscene=<level id>[,<seconds>]`: plays that level's cutscene at once (`?cutscene=ending`), from the given time; with `?hold` a still of that moment.
 - A finish under `?opponents=false` or `?ai` records nothing. `?warm` and `?bench` keep their own bots.
 - `SHOW_COLLIDERS_IN_GAME` (config.js, only with `DEBUG_MODE`): every collision shape drawn see-through at the height it collides (`buildColliderMesh` in mesh.js, uploaded by `loadLevel`, drawn after the cars in `render`): circles orange, walls cyan, boxes magenta, heights set by hand yellow, shapes with no height red to 40 m, the cars' own circles (`CAR_DISCS`) green. Both must be off for a release.
+- `DEBUG_MOBILE_CONTROLS` (config.js): the touch controls stay on whatever the input, with the mouse playing the finger, to try them on a desktop. Off for a release.
 
 Headless smoke test (checks for JS errors and produces a screenshot), run from the project folder. Chrome needs an absolute `file://` URL (with a relative path it reads the `?` parameters as part of the file name), so build it from the current folder. Git Bash:
 
@@ -64,7 +65,7 @@ All scripts share one global scope (top-level `const`/`let`/`function` are visib
 - `js/levels/ending.js`: `LEVELS.ending`, the ending cutscene (a level with a `cutscene` script, not in `LEVEL_TABLE`). All its content (script, props, timings) stays in this file.
 - `js/carmodel.js`: the buggy model, shared by the player and the opponents in other colours, and its wheel.
 - `js/gl.js`: WebGL setup, shaders (including the skirt shader `skirtProg`), mesh drawing, the car meshes, the low-res framebuffer, and `loadLevel(id)`: `buildLevelData`, then the terrain, decor, water, marks and glow meshes, `bakeFirelight`, `fitCollisionHeights`, the skirt, the minimap, and a level's moving meshes (`dynGL`).
-- `js/input.js`: every device turned into actions (see Menus and input); `setTouch`/`isTouch`, `hasMouse`.
+- `js/input.js`: every device turned into actions (see Menus and input); `setTouch`/`isTouch`, `hasMouse`; `inp()` also reads the touch controls' `touchState`.
 - `js/audio.js`: a small synth: engine drone, one-shot beeps and noise effects, the horn `vuvuzela()`, the cutscene voices.
 - `js/particles.js`: soft sprite particles and the car and explosion effects that feed them (`explode`). Particles have `to` (end colour) and `hot` (fire: drawn after the smoke, not dimmed at night); `MAXP` caps them.
 - `js/render.js`: the per-frame drawing: shadows, the night headlight (`updateHeadlight`), sky, world, cars, and the underwater tint (`drawUnderwater`).
@@ -74,6 +75,7 @@ All scripts share one global scope (top-level `const`/`let`/`function` are visib
 - `js/ailowg.js`: the opponents' landing speed limits on low-gravity levels (`lowgCaps`).
 - `js/hud.js`: the race HUD and the minimap (`buildMinimap`, `renderMinimap(c,S,res)`, also used at a higher `res` for the menu's track preview).
 - `js/tutorial.js`: the first played level and its tips (see First played level and tutorial).
+- `js/touch.js`: the on-screen touch controls for the race (see Touch controls); `touchOn`, `touchState`, `touchUse`, `simpleUI()`, `touchHud` (called from `updateHud`).
 - `js/cutscene.js`: the cutscene player (see Cutscenes).
 - `js/cookie.js`: the spinning cookie of the save question, a small software rasteriser on its own canvas (`showCookie`).
 - `js/flags.js`: `FLAGS`, the vector art beside a track's location in the menu (ISO country codes plus a few regions and symbols; our own art, never emoji).
@@ -205,16 +207,26 @@ Flow: intro > track select > race > results > track select; settings opens from 
 
 ### Fonts and the HUD
 
-Kanit Bold Italic (display: headings, the track name, the big race text; registered in `@font-face` as its own family with one style, so keep `font-weight:400` on it) and Titillium Web (everything else; its digits are all the same width, so the timer and km/h readout do not jitter), loaded with `@font-face` from `fonts/` (works on `file://`), through `--display` / `--body` (`:root` in index.html). `#msg` (countdown, GO!, REKT, finish text; `.long` sets sentences smaller, toggled in `updateHud`; `SHOW_LEVEL_SUB` decides if the level's `sub` shows under the countdown) and `#pos` wear the gold-gradient header style. Never put live-changing numbers in Kanit: its digits have different widths. The HUD scales on windows smaller than 960x540 through `--hu` (1px at that size and above, so larger windows are untouched) and the minimap through `--mm`, in both layouts; the `.simpleui` rules (`SIMPLIFY_INGAME_UI`, the `simpleui` class on `<html>`) hold only what the simplified HUD places differently. On narrow portrait screens the lap and time move under the bars (simplified) or under the speed and level, and the controls help stays beside the bars, wrapped narrower.
+Kanit Bold Italic (display: headings, the track name, the big race text; registered in `@font-face` as its own family with one style, so keep `font-weight:400` on it) and Titillium Web (everything else; its digits are all the same width, so the timer and km/h readout do not jitter), loaded with `@font-face` from `fonts/` (works on `file://`), through `--display` / `--body` (`:root` in index.html). `#msg` (countdown, GO!, REKT, finish text; `.long` sets sentences smaller, toggled in `updateHud`; `SHOW_LEVEL_SUB` decides if the level's `sub` shows under the countdown) and `#pos` wear the gold-gradient header style. Never put live-changing numbers in Kanit: its digits have different widths. The HUD scales on windows smaller than 960x540 through `--hu` (1px at that size and above, so larger windows are untouched) and the minimap through `--mm`, in both layouts; the `.simpleui` rules (`SIMPLIFY_INGAME_UI` or the touch controls, the `simpleui` class on `<html>`; ask `simpleUI()` in code, not the setting) hold only what the simplified HUD places differently. On narrow portrait screens the lap and time move under the bars (simplified) or under the speed and level, and the controls help stays beside the bars, wrapped narrower.
 
 ### Phones and tablets
 
-The menus work on touch screens; the race does not yet (no touch driving controls and no way to pause by touch). `MOBILE_MENU` switches all of this: without it the `#mobileCss` stylesheet is removed at load and every screen gets the desktop menus. The layouts are media queries in `#mobileCss` in `index.html`, chosen by the window's shape and size (a narrow desktop window gets them too). Each redefines `--u` and rearranges the same elements, so a change to the desktop markup or sizes carries over; check the small sizes afterwards.
+The menus and the race work on touch screens (the race through the touch controls, below). `MOBILE_MENU` switches the menu layouts: without it the `#mobileCss` stylesheet is removed at load and every screen gets the desktop menus. The layouts are media queries in `#mobileCss` in `index.html`, chosen by the window's shape and size (a narrow desktop window gets them too). Each redefines `--u` and rearranges the same elements, so a change to the desktop markup or sizes carries over; check the small sizes afterwards.
 
 - Portrait (`max-aspect-ratio:1/1`): a header row with icon buttons (`headButton` in menu.js holds the text and the icon), difficulty, the track panel, all the miniatures, RACE; tablets get their own `--u`. Short portrait (height up to 700): the map moves beside the numbers.
 - Short landscape (height up to 500, or touch and width up to 800): no title and no track number, two columns, the description scrolls inside the panel; up to 600 wide there is no map, only the miniatures; the spinning cookie is hidden.
 - Large touch landscape: the desktop layout, with RACE and taller buttons, and the map takes any spare height.
 - `#mrace` (RACE, or LOCKED on a locked track) is shown only in these layouts: touch has no hints to explain how to start. `html.touch` (follows the last input: `setTouch`/`isTouch`) hides the focus frame and the hover colours and turns off start-by-second-tap, since a finger double-taps by accident. A swipe over the preview browses the tracks (`SWIPE_MIN`). Settings hides CONTROLS (and with it MOUSE RACING, a row of the controls screen) unless the browser reports a mouse or trackpad (`hasMouse`), on the user's decision; a keyboard cannot be detected. Tap targets are at least 44px, the padding respects the safe areas (`--pad`), and heights use `--vh` (dvh where supported) because of phone browser bars.
+
+### Touch controls
+
+`js/touch.js`, with the `#touch` layer and its CSS in `index.html`. The layer covers the race (`body.play`, not during a cutscene), under the menus, and takes every finger.
+
+- On and off (`touchUse`): a finger turns them on (on a touch-only device, `(hover:none) and (pointer:coarse)`, from the start), a key, the pad or a mouse button turns them off; `DEBUG_MOBILE_CONTROLS` keeps them on. While on, `html.tctl` is set, the HUD is the simplified one (`simpleui`), and the controls help, the mouse racing buttons and the pause menu's control list are hidden. The finger that turns them on during a race already works them (it lands on the picture, so `#gl` has `touch-action:none`).
+- Left half: a floating stick that appears where the thumb lands, in the lower left quarter (`stickZone`), and follows the thumb past its rim on a short leash (`TSTICK_LEASH`). Sideways steers (analog, dead zone and full lock in `TSTICK_*`); pulling it down reverses; with `TOUCH_AUTO_THROTTLE` holding it drives, without it pushing up does.
+- Right: NITROUS (large, its rim shows the tank and greys while locked) and BRAKE (the handbrake), placed by `touchLayout` from the screen's short side and the safe areas (the layer's padding). A button's hit area is larger than its circle (`btnAt`) and a thumb can slide from one to the other. Under the bars: BACK ON TRACK and PAUSE, taps.
+- Moves and lifts are followed on the window, not on the layer. The race reads everything through `touchState` in `inp()`, like the pad; touch replaces mouse racing while on. Leaving the browser (`visibilitychange`) opens the pause menu; the race ending releases every finger.
+- The tutorial names the buttons by their symbols (`tutKey`); in landscape its tip sits between the stick and the buttons, in portrait above the car.
 
 ## Saved game and progression
 

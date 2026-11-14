@@ -62,7 +62,7 @@ The game is inspired by *Big Red Racing* (1996, Big Red Software / Domark), an a
 - Track select: the game title at the top, the difficulty bar under it, every track in miniature on the left (6 columns x 4 rows, scrolling when there are more), and on the right a panel with the track's number, name, real-life location with a flag, a large map preview with the checkpoints, the numbers (length, jumps, checkpoints, bridges) and a short description. Keyboard, mouse, gamepad and touch all work; locked tracks show what they need.
 - A pause menu during a race (return to game, restart race, controls, back to menu), with every race control listed beside it; the race and the engine sound stand still while it is open.
 - A results screen with your place, newly unlocked tracks, and next track, retry and back to menu.
-- Phone and tablet layouts for the menus (racing on touch is not built yet).
+- Phone and tablet layouts for the menus, and touch controls for racing (see Controls).
 - Two bundled fonts (SIL Open Font License): Kanit Bold Italic for headings and the big race text, Titillium Web for everything else. The background is a dark navy-to-black gradient with faint noise.
 
 ## Progress and settings
@@ -81,6 +81,8 @@ These are the defaults.
 | Back on track | R |
 | Pause menu | Esc or P |
 | Menus: confirm / cancel | Enter or X / Backspace or Z |
+
+On phones and tablets the race has on-screen controls: a stick that appears under the left thumb (hold it to drive, move it sideways to steer, pull it down to reverse), nitrous and brake buttons on the right, and back on track and pause buttons at the top right.
 
 ## Difficulty
 
